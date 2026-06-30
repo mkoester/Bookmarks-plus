@@ -12,6 +12,12 @@ const sharedManifest = JSON.parse(
   fs.readFileSync(path.resolve(__dirname, "manifests/manifest.shared.json"), "utf-8")
 );
 
+// package.json is the single source of truth for the version; it's injected into the manifest
+// at build time so there's no second number to keep in sync.
+const pkg = JSON.parse(
+  fs.readFileSync(path.resolve(__dirname, "package.json"), "utf-8")
+);
+
 // Deep merge: objects are merged recursively; arrays are unioned (deduplicated).
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function deepMergeManifests(base: any, override: any): any {
@@ -89,6 +95,7 @@ export default (env: { browser: "chrome" | "firefox" }): Configuration => {
             transform(content: Buffer) {
               const browserManifest = JSON.parse(content.toString());
               const merged = deepMergeManifests(sharedManifest, browserManifest);
+              merged.version = pkg.version;
               return JSON.stringify(merged, null, 2);
             },
           },

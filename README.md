@@ -16,13 +16,13 @@ Browser extension for [Linkding](https://github.com/sissbruecker/linkding) — d
 ## Development
 
 ```bash
-npm install
+pnpm install
 
 # Chrome (watch mode)
-npm run dev:chrome
+pnpm run dev:chrome
 
 # Firefox (watch mode)
-npm run dev:firefox
+pnpm run dev:firefox
 ```
 
 Output lands in `dist/chrome/` or `dist/firefox/`.
@@ -36,9 +36,19 @@ Output lands in `dist/chrome/` or `dist/firefox/`.
 ## Build
 
 ```bash
-npm run build        # both browsers
-npm run build:chrome
-npm run build:firefox
+pnpm build           # both browsers
+pnpm run build:chrome
+pnpm run build:firefox
+```
+
+### Versioning
+
+The version lives in **`package.json` only**. It's injected into each browser's
+`manifest.json` at build time ([webpack.config.ts](webpack.config.ts)), so the manifests
+carry no `version` field of their own. To release, bump it in one place:
+
+```bash
+pnpm version patch   # or edit package.json "version"
 ```
 
 ## Project structure
@@ -58,11 +68,42 @@ public/icons/    # Extension icons (add icon48.png + icon128.png)
 ## Configuration
 
 Open the extension options to:
-- Set your Linkding URL and API token
+- Set your Linkding URL and API token (+ optional username, see below)
 - Configure the sync interval
 - Toggle static demo data mode
 - Import browser bookmarks (requests the `bookmarks` permission)
 - Define bookmark folders with match rules
+
+### Linkding connection & permissions
+
+Authentication is **token only** — `Authorization: Token <token>`. The Linkding REST API
+does not use the username; the **username field is a display-only label** and is never sent.
+(Get a token in Linkding under Settings → Integrations → REST API.)
+
+The username/session of your logged-in browser **cannot** be reused (unlike the old
+Tampermonkey userscript): an extension's requests are cross-origin to your Linkding host, so
+the `SameSite=Lax` session cookie isn't sent. Token auth is the supported path and works in a
+fresh profile / background sync regardless of login state.
+
+On **Save**, the options page requests host permission for exactly your configured Linkding
+origin (e.g. `https://links.example.com/*`), bundled with the `bookmarks` request into a single
+prompt. This host permission is what lets the extension read the API cross-origin (it grants a
+CORS bypass for the extension's own fetches). Without it you'd see a `CORS header
+'Access-Control-Allow-Origin' missing` / `401` failure.
+
+> **Firefox quirk:** because the manifest declares the optional host permission as `<all_urls>`,
+> a grant scoped to a single host is stored and active but does **not** appear in about:addons →
+> Permissions (the "Access your data for all websites" toggle stays off, and the specific host
+> isn't listed). Confirm it from the extension console with `browser.permissions.getAll()`.
+> Re-saving an existing Linkding provider after upgrading triggers the host-permission prompt
+> once.
+
+### Pagination
+
+The Linkding provider fetches **all** bookmarks by following the API's `next` link
+(`/api/bookmarks/?limit=100`). Note Linkding has **no `tag` query parameter** — tag filtering
+is done via the search query (`?q=%23tagname`), not `?tag=`. The provider doesn't filter by
+tag, so this doesn't apply here, but it's the gotcha behind tag-filtered fetches elsewhere.
 
 ### Browser bookmark tags
 

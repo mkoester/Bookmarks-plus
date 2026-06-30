@@ -1,13 +1,13 @@
 {
   "name": "linkding-ext",
-  "version": "0.1.0",
+  "version": "0.1.18",
   "description": "Browser extension for Linkding bookmarks",
   "scripts": {
     "dev:chrome": "webpack --config webpack.config.ts --env browser=chrome --watch",
     "dev:firefox": "webpack --config webpack.config.ts --env browser=firefox --watch",
     "build:chrome": "webpack --config webpack.config.ts --env browser=chrome",
     "build:firefox": "webpack --config webpack.config.ts --env browser=firefox",
-    "build": "npm run build:chrome && npm run build:firefox",
+    "build": "pnpm run build:chrome && pnpm run build:firefox",
     "type-check": "tsc --noEmit"
   },
   "devDependencies": {

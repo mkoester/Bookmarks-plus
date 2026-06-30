@@ -46,23 +46,49 @@ async function save(): Promise<void> {
   };
 
   // Permission request must be the first await — user gesture activation expires after the first
-  // async operation in Firefox.
+  // async operation in Firefox. Bundle the bookmarks permission (browser provider) and the host
+  // permissions for each linkding origin into a single request so the gesture is only spent once.
   const hasBrowserProvider = settings.providers.some((p) => p.type === "browser");
-  let browserPermissionGranted = !hasBrowserProvider;
-  if (hasBrowserProvider) {
-    browserPermissionGranted = await ext.permissions.request({ permissions: ["bookmarks"] });
+  const linkdingOriginPatterns = linkdingOrigins(settings.providers);
+  const needsPermissions = hasBrowserProvider || linkdingOriginPatterns.length > 0;
+
+  let permissionsGranted = !needsPermissions;
+  if (needsPermissions) {
+    permissionsGranted = await ext.permissions.request({
+      ...(hasBrowserProvider ? { permissions: ["bookmarks"] } : {}),
+      ...(linkdingOriginPatterns.length > 0 ? { origins: linkdingOriginPatterns } : {}),
+    });
   }
 
   await saveSettings(settings);
   await saveFolders(folders);
 
-  if (browserPermissionGranted) {
+  if (permissionsGranted) {
     await ext.runtime.sendMessage({ type: "sync_requested" });
   }
 
   const status = document.getElementById("status")!;
-  status.textContent = "Saved.";
-  setTimeout(() => { status.textContent = ""; }, 2000);
+  status.textContent = permissionsGranted
+    ? "Saved."
+    : "Saved, but permissions were declined — those providers won't sync until granted.";
+  setTimeout(() => { status.textContent = ""; }, 4000);
+}
+
+// Origin match patterns ("https://host/*") for each configured linkding provider, so we can
+// request host access for exactly those hosts (a subset of the manifest's <all_urls>) instead
+// of making the user enable all-sites access by hand. Invalid/blank URLs are skipped.
+function linkdingOrigins(providerList: ProviderConfig[]): string[] {
+  const origins = new Set<string>();
+  for (const provider of providerList) {
+    if (provider.type === "linkding" && provider.url) {
+      try {
+        origins.add(`${new URL(provider.url).origin}/*`);
+      } catch {
+        // ignore invalid URL; user is still editing
+      }
+    }
+  }
+  return [...origins];
 }
 
 // ---- Provider list ----------------------------------------------------------
@@ -149,6 +175,17 @@ function renderLinkdingConfig(provider: LinkdingProviderConfig, index: number): 
   });
   urlLabel.appendChild(urlInput);
 
+  const usernameLabel = document.createElement("label");
+  usernameLabel.textContent = "Username (optional, for display only)";
+  const usernameInput = document.createElement("input");
+  usernameInput.type = "text";
+  usernameInput.value = provider.username ?? "";
+  usernameInput.placeholder = "your-linkding-username";
+  usernameInput.addEventListener("input", () => {
+    (providers[index] as LinkdingProviderConfig).username = usernameInput.value.trim();
+  });
+  usernameLabel.appendChild(usernameInput);
+
   const tokenLabel = document.createElement("label");
   tokenLabel.textContent = "API token";
   const tokenInput = document.createElement("input");
@@ -161,6 +198,7 @@ function renderLinkdingConfig(provider: LinkdingProviderConfig, index: number): 
   tokenLabel.appendChild(tokenInput);
 
   div.appendChild(urlLabel);
+  div.appendChild(usernameLabel);
   div.appendChild(tokenLabel);
   return div;
 }

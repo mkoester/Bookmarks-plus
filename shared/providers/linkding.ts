@@ -28,7 +28,6 @@ export class LinkdingProvider implements BookmarkProvider {
     const response = await fetch(url, {
       headers: {
         Authorization: `Token ${this.config.token}`,
-        "Content-Type": "application/json",
       },
     });
 

@@ -58,6 +58,7 @@ export interface LinkdingProviderConfig extends BaseProviderConfig {
   type: "linkding";
   url: string;
   token: string;
+  username?: string; // display label only; not sent to the linkding API (token auth)
 }
 
 export type ProviderConfig =

@@ -1,7 +1,6 @@
 {
   "manifest_version": 3,
   "name": "Bookmarks+",
-  "version": "0.1.18",
   "description": "Quick access to your important bookmarks",
   "permissions": ["storage", "alarms"],
   "optional_permissions": ["bookmarks"],
