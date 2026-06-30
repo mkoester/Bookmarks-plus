@@ -91,6 +91,30 @@ section {
   flex: 1;
 }
 
+.provider-link {
+  flex: 1;
+  text-align: left;
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  color: #c8d6e5;
+  font-size: 0.95rem;
+  padding: 0.2rem 0;
+  cursor: pointer;
+}
+
+.provider-link:hover {
+  background: transparent;
+  color: #fff;
+  text-decoration: underline;
+}
+
+.remove-provider-btn {
+  margin-top: 1.25rem;
+  background: #3a1a1a;
+  border-color: #6a2a2a;
+}
+
 .provider-type-badge {
   font-size: 0.7rem;
   text-transform: uppercase;

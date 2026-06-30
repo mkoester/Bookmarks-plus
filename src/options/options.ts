@@ -12,6 +12,9 @@ import type {
   Settings,
 } from "@shared/types";
 
+// Provider types that may only exist once (no per-instance config to distinguish them).
+const SINGLETON_PROVIDER_TYPES = new Set<ProviderType>(["static", "browser"]);
+
 let folders: Folder[] = [];
 let providers: ProviderConfig[] = [];
 let bookmarks: BookmarkMap = {};
@@ -103,24 +106,28 @@ function renderOverviewPanel(): HTMLElement {
     hint("Bookmarks are fetched from one or more providers and merged into a single collection.")
   );
 
-  providers.forEach((provider, index) => {
-    providerSection.appendChild(renderProviderEditor(provider, index));
+  providers.forEach((provider) => {
+    providerSection.appendChild(renderProviderRow(provider));
   });
 
   const addRow = document.createElement("div");
   addRow.className = "add-provider-row";
   const select = document.createElement("select");
+  const existingTypes = new Set(providers.map((p) => p.type));
   ([
     ["static", "Static (built-in demo data)"],
     ["json", "JSON (paste your own)"],
     ["browser", "Browser bookmarks"],
     ["linkding", "Linkding"],
-  ] as Array<[ProviderType, string]>).forEach(([value, label]) => {
-    const opt = document.createElement("option");
-    opt.value = value;
-    opt.textContent = label;
-    select.appendChild(opt);
-  });
+  ] as Array<[ProviderType, string]>)
+    // static and browser are singletons — hide them from the menu once one exists
+    .filter(([value]) => !(SINGLETON_PROVIDER_TYPES.has(value) && existingTypes.has(value)))
+    .forEach(([value, label]) => {
+      const opt = document.createElement("option");
+      opt.value = value;
+      opt.textContent = label;
+      select.appendChild(opt);
+    });
   const addBtn = document.createElement("button");
   addBtn.textContent = "+ Add provider";
   addBtn.addEventListener("click", () => addProvider(select.value as ProviderType));
@@ -183,7 +190,9 @@ function renderProviderPanel(providerId: string): HTMLElement {
 
   const provider = providers[index];
   section.appendChild(sectionHeading(providerTabLabel(provider)));
-  section.appendChild(renderProviderEditor(provider, index));
+
+  const config = renderProviderConfig(provider, index);
+  if (config) section.appendChild(config);
 
   section.appendChild(sectionHeading("Tags"));
   const tags = sortTagCounts(providerTagCounts(provider.id));
@@ -195,15 +204,26 @@ function renderProviderPanel(providerId: string): HTMLElement {
     section.appendChild(renderTagTable(tags));
   }
 
+  const removeBtn = document.createElement("button");
+  removeBtn.className = "remove-provider-btn";
+  removeBtn.textContent = "Remove provider";
+  removeBtn.addEventListener("click", () => removeProvider(provider.id));
+  section.appendChild(removeBtn);
+
   return section;
 }
 
 function providerTabLabel(provider: ProviderConfig): string {
-  const base = provider.name || provider.type;
+  // Linkding always shows its username when set, regardless of how many linkding providers exist.
   if (provider.type === "linkding" && provider.username) {
-    return `${base} (${provider.username})`;
+    return `linkding (${provider.username})`;
   }
-  return base;
+  // Otherwise only disambiguate with a 0-based index when more than one of the type exists.
+  const sameType = providers.filter((p) => p.type === provider.type);
+  if (sameType.length > 1) {
+    return `${provider.type} (${sameType.findIndex((p) => p.id === provider.id)})`;
+  }
+  return provider.type;
 }
 
 // ---- Per-provider tag table -------------------------------------------------
@@ -351,19 +371,22 @@ async function save(): Promise<void> {
 
 // ---- Provider editors -------------------------------------------------------
 
-function renderProviderEditor(provider: ProviderConfig, index: number): HTMLElement {
+// Overview row: a navigational summary (label links to the provider's own tab) + remove.
+// The actual configuration fields live only in the provider's tab.
+function renderProviderRow(provider: ProviderConfig): HTMLElement {
   const div = document.createElement("div");
   div.className = "provider-editor";
 
   const header = document.createElement("div");
   header.className = "provider-header";
 
-  const nameInput = document.createElement("input");
-  nameInput.type = "text";
-  nameInput.value = provider.name;
-  nameInput.placeholder = "Provider name";
-  nameInput.addEventListener("input", () => {
-    providers[index] = { ...providers[index], name: nameInput.value };
+  const link = document.createElement("button");
+  link.className = "provider-link";
+  link.textContent = providerTabLabel(provider);
+  link.title = "Open this provider's settings";
+  link.addEventListener("click", () => {
+    activeTabId = `provider:${provider.id}`;
+    renderTabs();
   });
 
   const typeBadge = document.createElement("span");
@@ -372,20 +395,52 @@ function renderProviderEditor(provider: ProviderConfig, index: number): HTMLElem
 
   const removeBtn = document.createElement("button");
   removeBtn.textContent = "Remove";
-  removeBtn.addEventListener("click", () => {
-    providers.splice(index, 1);
-    renderTabs();
-  });
+  removeBtn.addEventListener("click", () => removeProvider(provider.id));
 
-  header.appendChild(nameInput);
+  header.appendChild(link);
   header.appendChild(typeBadge);
   header.appendChild(removeBtn);
   div.appendChild(header);
 
-  const configDiv = renderProviderConfig(provider, index);
-  if (configDiv) div.appendChild(configDiv);
-
   return div;
+}
+
+async function removeProvider(providerId: string): Promise<void> {
+  const index = providers.findIndex((p) => p.id === providerId);
+  if (index === -1) return;
+  const [removed] = providers.splice(index, 1);
+
+  await revokeProviderPermissions(removed);
+  await loadGrantedOrigins();
+
+  if (activeTabId === `provider:${providerId}`) activeTabId = "overview";
+  renderTabs();
+}
+
+// When a provider is removed, drop the permission only it needed — unless another remaining
+// provider still relies on the same one. (Note: this acts immediately, like the Permissions-tab
+// Revoke button; the provider list itself is still only persisted on Save.)
+async function revokeProviderPermissions(removed: ProviderConfig): Promise<void> {
+  if (removed.type === "browser" && !providers.some((p) => p.type === "browser")) {
+    await ext.permissions.remove({ permissions: ["bookmarks"] });
+  }
+  if (removed.type === "linkding" && removed.url) {
+    const origin = originPattern(removed.url);
+    const stillNeeded =
+      origin !== null &&
+      providers.some((p) => p.type === "linkding" && p.url && originPattern(p.url) === origin);
+    if (origin !== null && !stillNeeded) {
+      await ext.permissions.remove({ origins: [origin] });
+    }
+  }
+}
+
+function originPattern(url: string): string | null {
+  try {
+    return `${new URL(url).origin}/*`;
+  } catch {
+    return null;
+  }
 }
 
 function renderProviderConfig(provider: ProviderConfig, index: number): HTMLElement | null {
@@ -481,6 +536,8 @@ function renderJsonConfig(provider: JsonProviderConfig, index: number): HTMLElem
 }
 
 function addProvider(type: ProviderType): void {
+  if (SINGLETON_PROVIDER_TYPES.has(type) && providers.some((p) => p.type === type)) return;
+
   const base = { id: crypto.randomUUID(), name: type, type };
 
   let config: ProviderConfig;
