@@ -16,6 +16,12 @@
 
 ## Architecture decisions (already made, don't revisit)
 
+**Surfaces & shortcuts** (non-obvious — don't "simplify" these away)
+- New-tab gear (⚙, top-right of `newtab.html`) → `runtime.openOptionsPage()`. The link the *browser* shows at the bottom of an overridden new tab is browser attribution to about:addons; not ours, can't change it.
+- **Chromium side-panel toggle**: `Ctrl+Shift+S` → `commands.open-side-panel` (declared only in `manifest.chrome.json`). Background **toggles** it: the side panel opens a `runtime.connect` port named `sidepanel:<windowId>` on load; background tracks open windows via those ports and, on the command, either `postMessage({type:"close"})` (panel calls `window.close()`) or `chrome.sidePanel.open()`. Why not `sidePanel.close()`: it **rejects for a global panel** (ours is global). `open()` is called directly in the handler to keep the user gesture.
+- **Firefox sidebar**: `Ctrl+Alt+S` via the built-in `_execute_sidebar_action` command (native toggle); `registerForToggle()` in `sidebar.ts` no-ops on Firefox.
+- **Onboarding** (`onboarding/`, opens on first install via `onInstalled` reason `"install"`): one shared page, **runtime-tailored** in `onboarding.ts`. Detect Firefox via `location.protocol === "moz-extension:"` (NOT `typeof browser` — truthy on Chromium too); detect new-tab build via `runtime.getManifest().chrome_url_overrides`. `chrome://` links are opened via `tabs.create` (plain `<a href="chrome://…">` navigation is blocked).
+
 **Bookmark IDs**
 - All `Bookmark.id` values are namespaced strings: `"${providerConfigId}:${rawId}"`
 - `BookmarkMap = Record<string, Bookmark>`
