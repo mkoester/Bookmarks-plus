@@ -2,14 +2,16 @@
 
 Working notes for publishing **Bookmarks+** to the Firefox Add-ons store (AMO) and
 the Chrome Web Store (CWS). Pairs with `CLAUDE.md` (architecture) and `PRIVACY.md`
-(privacy policy). Last worked: 2026-06-30.
+(privacy policy). Last worked: 2026-07-03.
 
 ## Current status
 
-- **Version:** 1.0.1 (single source of truth = `package.json`; injected into each
-  manifest at build).
-- **Code state:** release-ready. `pnpm type-check` clean. AMO `web-ext lint`:
-  **0 errors, 3 benign warnings** (see below).
+- **Version:** 1.0.2 (single source of truth = `package.json`; injected into each
+  manifest at build). 1.0.2 = pre-submission cleanup: shared folder-rendering
+  helper (`shared/folderList.ts`), unit tests wired into `pnpm build`, doc fixes.
+- **Code state:** release-ready pending a manual re-test in both browsers (the
+  render code was refactored). `pnpm build` (type-check + tests + 3 targets)
+  clean. AMO `web-ext lint`: **0 errors, 3 benign warnings** (see below).
 - **NOT yet done:** git commit (user does this themselves), and the actual store
   uploads.
 

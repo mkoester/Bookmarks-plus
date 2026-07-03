@@ -4,6 +4,7 @@ import type {
   Folder,
   RuleCondition,
 } from "./types";
+import { isAllowedBookmarkUrl } from "./url";
 
 // ---- Map conversion ---------------------------------------------------------
 
@@ -23,6 +24,13 @@ export function mergeIntoMap(existing: BookmarkMap, updated: Bookmark[]): Bookma
     result[b.id] = b;
   }
   return result;
+}
+
+/** The folder's bookmarks that exist in the map and have an allowed URL scheme. */
+export function safeFolderBookmarks(folder: Folder, bookmarkMap: BookmarkMap): Bookmark[] {
+  return folder.bookmark_ids
+    .map((id) => bookmarkMap[id])
+    .filter((b): b is Bookmark => b != null && isAllowedBookmarkUrl(b.url));
 }
 
 // ---- Folder rule evaluation -------------------------------------------------

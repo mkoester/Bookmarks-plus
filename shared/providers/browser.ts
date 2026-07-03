@@ -26,7 +26,7 @@ export class BrowserProvider implements BookmarkProvider {
   }
 
   private walk(
-    nodes: chrome.bookmarks.BookmarkTreeNode[],
+    nodes: browser.bookmarks.BookmarkTreeNode[],
     folderPath: string[],
     out: Bookmark[]
   ): void {

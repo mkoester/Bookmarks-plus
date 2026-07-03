@@ -1,10 +1,9 @@
 import ext from "@shared/browser";
 import { getBookmarks, getFolders, getSyncStatus } from "@shared/storage";
-import { renderFavicon } from "@shared/favicon";
 import { applyStoredTheme } from "@shared/theme";
 import { renderSyncErrorBanner } from "@shared/syncBanner";
-import { isAllowedBookmarkUrl } from "@shared/url";
-import type { Bookmark, BookmarkMap, Folder, Message } from "@shared/types";
+import { renderFolderDetails } from "@shared/folderList";
+import type { BookmarkMap, Folder, Message } from "@shared/types";
 
 async function init(): Promise<void> {
   await applyStoredTheme();
@@ -37,61 +36,24 @@ function renderFolders(bookmarkMap: BookmarkMap, folders: Folder[]): void {
     return;
   }
 
+  // Left-click and middle-click "open all" both open new tabs and close the popup.
   for (const folder of folders) {
-    container.appendChild(renderFolder(folder, bookmarkMap));
+    container.appendChild(
+      renderFolderDetails(folder, bookmarkMap, {
+        faviconSize: 14,
+        onOpen: (bookmark) => {
+          ext.tabs.create({ url: bookmark.url });
+          window.close();
+        },
+        onOpenAll: (bookmarks) => {
+          for (const bookmark of bookmarks) {
+            ext.tabs.create({ url: bookmark.url });
+          }
+          window.close();
+        },
+      }),
+    );
   }
-}
-
-function renderFolder(folder: Folder, bookmarkMap: BookmarkMap): HTMLElement {
-  const details = document.createElement("details");
-  details.open = true;
-
-  const summary = document.createElement("summary");
-  summary.textContent = folder.name;
-  summary.addEventListener("mousedown", (e) => {
-    if (e.button !== 1) return;
-    e.preventDefault();
-    const bookmarks = folder.bookmark_ids
-      .map((id) => bookmarkMap[id])
-      .filter((b): b is Bookmark => b != null && isAllowedBookmarkUrl(b.url));
-    for (const bookmark of bookmarks) {
-      ext.tabs.create({ url: bookmark.url });
-    }
-    window.close();
-  });
-  details.appendChild(summary);
-
-  const ul = document.createElement("ul");
-  for (const id of folder.bookmark_ids) {
-    const bookmark = bookmarkMap[id];
-    if (bookmark) ul.appendChild(renderBookmark(bookmark));
-  }
-  details.appendChild(ul);
-
-  return details;
-}
-
-function renderBookmark(bookmark: Bookmark): HTMLElement {
-  const li = document.createElement("li");
-  const a = document.createElement("a");
-  const safe = isAllowedBookmarkUrl(bookmark.url);
-  a.href = safe ? bookmark.url : "#";
-  if (!safe) a.title = "Blocked: unsupported link type";
-
-  a.addEventListener("click", (e) => {
-    e.preventDefault();
-    if (!safe) return;
-    ext.tabs.create({ url: bookmark.url });
-    window.close();
-  });
-
-  const span = document.createElement("span");
-  span.textContent = bookmark.title;
-
-  a.appendChild(renderFavicon(bookmark, 14));
-  a.appendChild(span);
-  li.appendChild(a);
-  return li;
 }
 
 document.addEventListener("DOMContentLoaded", init);

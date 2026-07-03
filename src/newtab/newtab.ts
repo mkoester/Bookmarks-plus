@@ -1,10 +1,9 @@
 import ext from "@shared/browser";
 import { getBookmarks, getFolders, getSyncStatus } from "@shared/storage";
-import { renderFavicon } from "@shared/favicon";
 import { applyStoredTheme } from "@shared/theme";
 import { renderSyncErrorBanner } from "@shared/syncBanner";
-import { isAllowedBookmarkUrl } from "@shared/url";
-import type { Bookmark, BookmarkMap, Folder, Message, SyncStatus } from "@shared/types";
+import { renderBookmarkItem } from "@shared/folderList";
+import type { BookmarkMap, Folder, Message, SyncStatus } from "@shared/types";
 
 // Skip re-rendering (and aborting in-flight favicon loads) when a sync writes
 // back data that's identical to what's already on screen.
@@ -84,37 +83,13 @@ function renderFolder(folder: Folder, bookmarkMap: BookmarkMap): HTMLElement {
   for (const id of folder.bookmark_ids) {
     const bookmark = bookmarkMap[id];
     if (bookmark) {
-      list.appendChild(renderBookmark(bookmark));
+      // No onOpen: bookmarks are plain anchors opening a new tab natively.
+      list.appendChild(renderBookmarkItem(bookmark, { faviconSize: 16 }));
     }
   }
 
   section.appendChild(list);
   return section;
-}
-
-function renderBookmark(bookmark: Bookmark): HTMLElement {
-  const li = document.createElement("li");
-  const a = document.createElement("a");
-
-  // Defensive: only link out to safe schemes. A `javascript:` URL clicked here
-  // would run in this privileged extension page, so a bad bookmark is neutered.
-  if (isAllowedBookmarkUrl(bookmark.url)) {
-    a.href = bookmark.url;
-    a.target = "_blank";
-    a.rel = "noopener noreferrer";
-  } else {
-    a.href = "#";
-    a.title = "Blocked: unsupported link type";
-    a.addEventListener("click", (e) => e.preventDefault());
-  }
-
-  const span = document.createElement("span");
-  span.textContent = bookmark.title;
-
-  a.appendChild(renderFavicon(bookmark, 16));
-  a.appendChild(span);
-  li.appendChild(a);
-  return li;
 }
 
 // ---- Sync -------------------------------------------------------------------

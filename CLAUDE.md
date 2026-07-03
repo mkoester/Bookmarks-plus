@@ -8,7 +8,8 @@
 
 - **Package manager: pnpm** (not npm — `package-lock.json` is gitignored)
 - `pnpm type-check` — `tsc --noEmit`, should be clean
-- `pnpm build` — builds all three targets via webpack, **production mode** (tree-shaken, no source maps, **not minified** — `optimization.minimize: false`, because AMO advises against minification and it has no perf benefit for local extension code). `dev:*`/watch builds stay development with inline source maps. Mode is `--env mode=production` (see `isProd` in `webpack.config.ts`).
+- `pnpm test` — unit tests in `tests/*.test.ts` via `node --test` with the `tsx` loader (no framework). They cover the pure `shared/` modules (`url`, `validation`, `bookmarks`) and must stay free of DOM/`ext` imports (`shared/browser.ts` throws outside an extension context).
+- `pnpm build` — runs **type-check + tests first**, then builds all three targets via webpack, **production mode** (tree-shaken, no source maps, **not minified** — `optimization.minimize: false`, because AMO advises against minification and it has no perf benefit for local extension code). `dev:*`/watch builds stay development with inline source maps. Mode is `--env mode=production` (see `isProd` in `webpack.config.ts`).
 - `pnpm package` — builds, then zips each `dist/<target>/` into `web-store/bookmarks-plus-<target>-<version>.zip` for store upload (needs the `zip` CLI). `web-store/` is gitignored.
 - `pnpm screenshots` — generates repeatable 1280×800 store screenshots to `web-store/screenshots/`. `scripts/screenshots.mjs` copies `dist/chrome`, injects `scripts/screenshot-harness.js` (mocks `chrome.*` with demo data so the real page bundles render headless), captures each surface with system **chromium --headless**, and frames the small ones with **ImageMagick** (caption font resolved via `fc-match`). Edit the `DEMO` data in the harness or the `SHOTS` list to change content. Needs `chromium` + `magick` on PATH; no npm install.
 - **Icon source:** `public/icons/icon.svg` (white paperclip + "+" badge on linkding violet `#5856e0`); re-rasterise with `rsvg-convert -w 48/-w 128 icon.svg -o icon48/128.png`. `icon.svg` is excluded from the build copy (PNGs only ship).
@@ -104,8 +105,10 @@ shared/
   types.ts            — all TypeScript interfaces and the ProviderConfig union
   browser.ts          — Firefox/Chrome API shim
   storage.ts          — storage read/write helpers, storage warning logic
-  bookmarks.ts        — getFaviconUrl, bookmarksToMap, mergeIntoMap,
-                        computeFolderMembership (no trimBookmark — providers handle trimming)
+  bookmarks.ts        — bookmarksToMap, mergeIntoMap, computeFolderMembership,
+                        safeFolderBookmarks (pure logic, unit-tested)
+  folderList.ts       — shared folder/bookmark DOM rendering for popup/sidebar/newtab
+                        (renderFolderDetails/renderBookmarkItem; open behaviour injected via callbacks)
   validation.ts       — validateBookmarks() + entryToBookmark() for the JSON provider
   providers/
     index.ts          — createProvider(config) factory
@@ -118,14 +121,22 @@ shared/
 
 src/
   background/background.ts   — service worker: provider loop, alarms, message handler
-  newtab/newtab.ts           — renders folders + bookmark list; storage change listener;
-                               storage warning banner
+  newtab/newtab.ts           — <section>/<h2> folder layout; bookmarks via shared
+                               renderBookmarkItem (native anchors); storage change listener
   newtab/newtab.html/css
-  popup/popup.ts             — same rendering, popup dimensions; <details>/<summary>;
-                               middle-click folder name → open all in new tabs
+  popup/popup.ts             — shared renderFolderDetails; left-click/middle-click open
+                               new tabs and close the popup
   popup/popup.html/css
+  sidebar/sidebar.ts         — shared renderFolderDetails; left-click navigates current
+                               tab, middle-click folder opens all in background tabs;
+                               Chromium side-panel toggle port
+  sidebar/sidebar.html/css
   options/options.ts         — provider management UI + folder/rule editor
   options/options.html/css
+  onboarding/onboarding.ts   — first-run welcome page, runtime-tailored per browser/target
+  onboarding/onboarding.html/css
+
+tests/                       — node:test unit tests for shared/ pure modules (run in pnpm build)
 
 manifests/
   manifest.shared.json       — common to all targets (no version field; injected from package.json at build)
@@ -135,9 +146,10 @@ manifests/
   (build deep-merges a target's manifest list in order; arrays are unioned — see TARGET_MANIFESTS in webpack.config.ts)
 
 public/icons/
-  icon48.png / icon128.png   — placeholder blue-circle icons
+  icon.svg                   — icon source (paperclip + "+" on linkding violet); PNGs rasterised from it
+  icon48.png / icon128.png   — shipped icons (see Build & tooling for the rsvg-convert command)
 
-webpack.config.ts            — parameterised by --env browser=chrome|firefox
+webpack.config.ts            — parameterised by --env target=firefox|chrome|chrome-newtab
                                @shared/* alias resolves to shared/
 ```
 
@@ -153,8 +165,8 @@ Pagination: follows `next` links until exhausted (100 results per page).
 - [ ] Deletion handling — full sync replaces the whole map, so deletions from Linkding/browser are caught. But if a provider is removed, its bookmarks linger in storage until the next sync. TODO: filter map by active provider IDs after sync.
 - [ ] Manual JSON import UI — `validateBookmarks()` exists in `validation.ts` and the options page has a JSON textarea, but there's no live validation feedback shown to the user
 - [ ] Per-provider incremental sync — Linkding supports `modified_since`; could speed up large collections
-- [ ] Options page does not yet request host permission for Linkding URLs (optional_host_permissions)
-- [ ] Real icons — replace `public/icons/icon{48,128}.png` with actual artwork (still placeholder blue circles; **store release blocker**)
+- [x] ~~Options page host permission for Linkding URLs~~ — requested on Save, scoped to the configured origin (see README "Linkding connection & permissions")
+- [x] ~~Real icons~~ — paperclip+"+" `icon.svg` created and rasterised (see Build & tooling)
 - [x] ~~CSS placeholder~~ — shared `:root` token set in `src/tokens.css`, light/dark/system themes
 - [x] ~~Error state UI when sync fails~~ — sync error banner (see Architecture)
 

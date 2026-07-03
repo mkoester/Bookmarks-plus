@@ -7,8 +7,8 @@ Browser extension for [Linkding](https://github.com/sissbruecker/linkding) — d
 - New Tab page with configurable bookmark folders
 - Popup for quick access
 - Folder rules: match bookmarks by tag, URL, or title (AND/OR combinations)
-- Incremental sync via Linkding's `modified_since` API
-- Background sync on timer + on New Tab open
+- Background sync on timer + on New Tab open (full sync each time; incremental
+  sync via Linkding's `modified_since` is a possible future optimisation)
 - Import your browser's own bookmarks (folder names become tags)
 - Static demo data mode (no Linkding instance needed)
 - Firefox + Chrome from one codebase
@@ -67,15 +67,18 @@ pnpm version patch   # or edit package.json "version"
 ## Project structure
 
 ```
-shared/          # All shared logic (types, storage, bookmarks, API, validation)
+shared/          # All shared logic (types, storage, bookmarks, rendering, validation)
   data/          # Static mock bookmark data
 src/
   background/    # Service worker — sync logic, alarms, message handling
   newtab/        # New Tab override page
   popup/         # Toolbar popup
+  sidebar/       # Sidebar (Firefox) / side panel (Chrome)
   options/       # Settings + folder rule editor
-manifests/       # Per-browser manifests (chrome/firefox)
-public/icons/    # Extension icons (add icon48.png + icon128.png)
+  onboarding/    # First-run onboarding page
+tests/           # Unit tests (node --test), run as part of pnpm build
+manifests/       # manifest.shared.json + per-target overlays (firefox, chrome, chrome-newtab)
+public/icons/    # Extension icons (icon.svg source + rasterised PNGs)
 ```
 
 ## Configuration

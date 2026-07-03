@@ -1,10 +1,9 @@
 import ext from "@shared/browser";
 import { getBookmarks, getFolders, getSyncStatus } from "@shared/storage";
-import { renderFavicon } from "@shared/favicon";
 import { applyStoredTheme } from "@shared/theme";
 import { renderSyncErrorBanner } from "@shared/syncBanner";
-import { isAllowedBookmarkUrl } from "@shared/url";
-import type { Bookmark, BookmarkMap, Folder, Message, SyncStatus } from "@shared/types";
+import { renderFolderDetails } from "@shared/folderList";
+import type { BookmarkMap, Folder, Message, SyncStatus } from "@shared/types";
 
 // The sidebar mirrors the popup's folder rendering, but it stays open, so it
 // re-renders on storage changes and opens bookmarks in the current tab instead
@@ -76,62 +75,24 @@ function renderFolders(bookmarkMap: BookmarkMap, folders: Folder[]): void {
     return;
   }
 
+  // Left-click: navigate the current tab (the sidebar stays open); a bookmark
+  // middle-click is left to the native anchor behaviour, which opens a
+  // background tab. Middle-click on the folder name: open all in background tabs.
   for (const folder of folders) {
-    container.appendChild(renderFolder(folder, bookmarkMap));
+    container.appendChild(
+      renderFolderDetails(folder, bookmarkMap, {
+        faviconSize: 14,
+        onOpen: (bookmark) => {
+          ext.tabs.update({ url: bookmark.url });
+        },
+        onOpenAll: (bookmarks) => {
+          for (const bookmark of bookmarks) {
+            ext.tabs.create({ url: bookmark.url, active: false });
+          }
+        },
+      }),
+    );
   }
-}
-
-function renderFolder(folder: Folder, bookmarkMap: BookmarkMap): HTMLElement {
-  const details = document.createElement("details");
-  details.open = true;
-
-  const summary = document.createElement("summary");
-  summary.textContent = folder.name;
-  // Middle-click the folder name: open all its bookmarks in background tabs.
-  summary.addEventListener("mousedown", (e) => {
-    if (e.button !== 1) return;
-    e.preventDefault();
-    const bookmarks = folder.bookmark_ids
-      .map((id) => bookmarkMap[id])
-      .filter((b): b is Bookmark => b != null && isAllowedBookmarkUrl(b.url));
-    for (const bookmark of bookmarks) {
-      ext.tabs.create({ url: bookmark.url, active: false });
-    }
-  });
-  details.appendChild(summary);
-
-  const ul = document.createElement("ul");
-  for (const id of folder.bookmark_ids) {
-    const bookmark = bookmarkMap[id];
-    if (bookmark) ul.appendChild(renderBookmark(bookmark));
-  }
-  details.appendChild(ul);
-
-  return details;
-}
-
-function renderBookmark(bookmark: Bookmark): HTMLElement {
-  const li = document.createElement("li");
-  const a = document.createElement("a");
-  const safe = isAllowedBookmarkUrl(bookmark.url);
-  a.href = safe ? bookmark.url : "#";
-  if (!safe) a.title = "Blocked: unsupported link type";
-
-  // Left-click: navigate the current tab (the sidebar stays open). Middle-click
-  // is left to the native anchor behaviour, which opens a background tab.
-  a.addEventListener("click", (e) => {
-    e.preventDefault();
-    if (!safe) return;
-    ext.tabs.update({ url: bookmark.url });
-  });
-
-  const span = document.createElement("span");
-  span.textContent = bookmark.title;
-
-  a.appendChild(renderFavicon(bookmark, 14));
-  a.appendChild(span);
-  li.appendChild(a);
-  return li;
 }
 
 // ---- Sync & live updates ----------------------------------------------------

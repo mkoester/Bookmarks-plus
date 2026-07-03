@@ -32,7 +32,6 @@ const pkg = JSON.parse(
 );
 
 // Deep merge: objects are merged recursively; arrays are unioned (deduplicated).
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 function deepMergeManifests(base: any, override: any): any {
   const result = { ...base };
   for (const key of Object.keys(override)) {
@@ -92,7 +91,6 @@ export default (env: { target?: string; browser?: string; mode?: string }): Conf
     throw new Error(`Unknown build target "${target}". Known: ${Object.keys(TARGET_MANIFESTS).join(", ")}`);
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const mergedManifest = manifestFiles.reduce<any>(
     (acc, file) => deepMergeManifests(acc, loadJson(file)),
     {}

@@ -1,0 +1,3 @@
+# esbuild (pulled in by tsx) needs its postinstall script to place its binary
+allowBuilds:
+  esbuild: true
