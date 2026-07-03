@@ -7,7 +7,36 @@ import path from "node:path";
 
 const root = path.resolve(path.dirname(new URL(import.meta.url).pathname), "..");
 const pkg = JSON.parse(readFileSync(path.join(root, "package.json"), "utf-8"));
-const version = pkg.version;
+
+// Git-based artifact versioning (same rules as thunderbird_send_as's build.sh):
+// clean main → 1.0.2 · other branch → 1.0.2-<hash> · dirty tree → …-SNAPSHOT.
+// Decorates the zip FILENAME only — the manifest inside must keep the plain
+// version (Chrome Web Store allows only 1-4 dot-separated integers; AMO is
+// similarly strict).
+function decoratedVersion(base) {
+  const git = (...args) => execFileSync("git", args, { cwd: root, encoding: "utf-8" }).trim();
+  try {
+    git("rev-parse", "--git-dir");
+  } catch {
+    console.warn("Not in a git repository — using base version only");
+    return base;
+  }
+  const branch = git("rev-parse", "--abbrev-ref", "HEAD");
+  const commit = git("rev-parse", "--short", "HEAD");
+  let dirty = false;
+  try {
+    git("diff-index", "--quiet", "HEAD", "--");
+  } catch {
+    dirty = true;
+  }
+  let version = base;
+  if (branch !== "main") version += `-${commit}`;
+  if (dirty) version += "-SNAPSHOT";
+  console.log(`Git info: branch=${branch}, commit=${commit}, status=${dirty ? "dirty" : "clean"}`);
+  return version;
+}
+
+const version = decoratedVersion(pkg.version);
 
 const TARGETS = ["firefox", "chrome", "chrome-newtab"];
 const outDir = path.join(root, "web-store");
