@@ -13,6 +13,43 @@ export const STATIC_FOLDERS: Folder[] = [
     rules: { match: "any", conditions: [{ type: "tag", value: "fediverse" }] },
     bookmark_ids: [],
   },
+  // The next two showcase nested groups (impossible with the old flat rules).
+  {
+    id: "00000000-0000-0000-0000-000000000003",
+    name: "Community (not social media nor crowdsourcing)",
+    rules: {
+      match: "all",
+      conditions: [
+        { type: "tag", value: "community" },
+        {
+          match: "none",
+          conditions: [
+            { type: "tag", value: "social-media" },
+            { type: "tag", value: "crowdsourcing" },
+          ],
+        },
+      ],
+    },
+    bookmark_ids: [],
+  },
+  {
+    id: "00000000-0000-0000-0000-000000000004",
+    name: "Open knowledge",
+    rules: {
+      match: "all",
+      conditions: [
+        { type: "tag", value: "knowledge" },
+        {
+          match: "any",
+          conditions: [
+            { type: "tag", value: "education" },
+            { type: "tag", value: "opensource" },
+          ],
+        },
+      ],
+    },
+    bookmark_ids: [],
+  },
 ];
 
 export const STATIC_BOOKMARKS: Bookmark[] = [

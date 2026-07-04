@@ -6,7 +6,9 @@ Browser extension for [Linkding](https://github.com/sissbruecker/linkding) — d
 
 - New Tab page with configurable bookmark folders
 - Popup for quick access
-- Folder rules: match bookmarks by tag, URL, or title (AND/OR combinations)
+- Folder rules: match bookmarks by tag, URL, or title with nested ALL/ANY/NONE
+  groups (e.g. `A AND (B OR C)`, or "everything except…"); rules editable as
+  JSON per folder, and all folder definitions exportable/importable as JSON
 - Background sync on timer + on New Tab open (full sync each time; incremental
   sync via Linkding's `modified_since` is a possible future optimisation)
 - Import your browser's own bookmarks (folder names become tags)

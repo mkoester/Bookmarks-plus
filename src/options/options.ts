@@ -4,15 +4,18 @@ import { applyStoredTheme, setTheme } from "@shared/theme";
 import type {
   BookmarkMap,
   Folder,
-  FolderRules,
   LinkdingProviderConfig,
   JsonProviderConfig,
+  MatchMode,
   ProviderConfig,
   ProviderType,
   RuleCondition,
+  RuleGroup,
   Settings,
   Theme,
 } from "@shared/types";
+import { isRuleGroup } from "@shared/types";
+import { parseFolders, parseRuleGroup } from "@shared/validation";
 
 // Provider types that may only exist once (no per-instance config to distinguish them).
 const SINGLETON_PROVIDER_TYPES = new Set<ProviderType>(["static", "browser"]);
@@ -46,6 +49,13 @@ async function init(): Promise<void> {
 
   await applyStoredTheme();
   await loadGrantedOrigins();
+
+  // Installed build's version, injected into the manifest from package.json at
+  // build time. Guarded: the screenshot harness's manifest mock has no version.
+  const version = ext.runtime.getManifest().version;
+  if (version) {
+    document.getElementById("version")!.textContent = `v${version}`;
+  }
 
   document.getElementById("save")?.addEventListener("click", save);
   renderTabs();
@@ -210,8 +220,12 @@ function renderFoldersPanel(): HTMLElement {
   const section = document.createElement("section");
   section.appendChild(sectionHeading("Folders"));
   section.appendChild(
-    hint("Folders are defined as rules that match bookmarks by tag, URL, or title.")
+    hint(
+      "Folders are defined as rules that match bookmarks by tag, URL, or title. " +
+      "Conditions can be nested into ALL / ANY / NONE groups, e.g. A AND (B OR C)."
+    )
   );
+  section.appendChild(renderLogicHelp());
 
   folders.forEach((folder, index) => {
     section.appendChild(renderFolderEditor(folder, index));
@@ -221,6 +235,8 @@ function renderFoldersPanel(): HTMLElement {
   addFolderBtn.textContent = "+ Add folder";
   addFolderBtn.addEventListener("click", addFolder);
   section.appendChild(addFolderBtn);
+
+  section.appendChild(renderFolderBackupSection());
 
   return section;
 }
@@ -381,6 +397,16 @@ function renderPermissionsPanel(): HTMLElement {
 // ---- Save -------------------------------------------------------------------
 
 async function save(): Promise<void> {
+  // Apply any open per-folder JSON editors first (synchronous, so the permission
+  // request below stays the first await). Invalid JSON blocks the save.
+  if (!applyPendingJsonEdits()) {
+    renderTabs();
+    const status = document.getElementById("status")!;
+    status.textContent = "Fix invalid folder-rules JSON before saving.";
+    setTimeout(() => { status.textContent = ""; }, 4000);
+    return;
+  }
+
   const settings: Settings = { syncIntervalMinutes, providers, theme };
 
   // Permission request must be the first await — user gesture activation expires after the first
@@ -617,7 +643,56 @@ function addProvider(type: ProviderType): void {
   renderTabs();
 }
 
+// Whether the boolean-logic help is expanded; module-level so it survives the
+// full re-render every edit triggers (same pattern as tagSort/jsonEdit).
+let logicHelpOpen = false;
+
+function renderLogicHelp(): HTMLElement {
+  const details = document.createElement("details");
+  details.className = "logic-help";
+  details.open = logicHelpOpen;
+  details.addEventListener("toggle", () => {
+    logicHelpOpen = details.open;
+  });
+
+  const summary = document.createElement("summary");
+  summary.textContent = "Boolean logic tips for complex folders";
+  details.appendChild(summary);
+
+  const intro = document.createElement("p");
+  intro.textContent =
+    "The match modes are the boolean operators: ALL = AND (∧), ANY = OR (∨), " +
+    "and NONE = NOT (¬) applied to the whole group: ¬(A ∨ B ∨ …). " +
+    "For more complex folders these identities help restructure rules:";
+  details.appendChild(intro);
+
+  const laws = document.createElement("ul");
+  [
+    "Distribution: A ∧ (B ∨ C) = (A ∧ B) ∨ (A ∧ C)",
+    "De Morgan: ¬(A ∧ B) = ¬A ∨ ¬B",
+    "De Morgan: ¬(A ∨ B) = ¬A ∧ ¬B",
+    "Double negation: ¬(¬A) = A",
+  ].forEach((law) => {
+    const li = document.createElement("li");
+    li.textContent = law;
+    laws.appendChild(li);
+  });
+  details.appendChild(laws);
+
+  const note = document.createElement("p");
+  note.textContent =
+    "Note: a NONE group with several conditions means ¬(A ∨ B) — by De Morgan " +
+    "the same as ¬A ∧ ¬B. Empty groups never match.";
+  details.appendChild(note);
+
+  return details;
+}
+
 // ---- Folder editors ---------------------------------------------------------
+
+// Per-folder JSON editor state, keyed by folder id. Module-level so it survives
+// renderTabs() re-renders (same pattern as tagSort).
+const jsonEdit = new Map<string, { text: string; error: string | null }>();
 
 function renderFolderEditor(folder: Folder, index: number): HTMLElement {
   const div = document.createElement("div");
@@ -631,57 +706,122 @@ function renderFolderEditor(folder: Folder, index: number): HTMLElement {
   nameInput.value = folder.name;
   nameInput.placeholder = "Folder name";
   nameInput.addEventListener("input", () => {
-    folders[index].name = nameInput.value;
+    folder.name = nameInput.value;
   });
 
-  const matchSelect = document.createElement("select");
-  ["all", "any"].forEach((val) => {
-    const opt = document.createElement("option");
-    opt.value = val;
-    opt.textContent = val === "all" ? "Match ALL" : "Match ANY";
-    if (folder.rules.match === val) opt.selected = true;
-    matchSelect.appendChild(opt);
-  });
-  matchSelect.addEventListener("change", () => {
-    folders[index].rules.match = matchSelect.value as "all" | "any";
+  const jsonBtn = document.createElement("button");
+  jsonBtn.textContent = jsonEdit.has(folder.id) ? "Edit visually" : "Edit as JSON";
+  jsonBtn.addEventListener("click", () => {
+    if (jsonEdit.has(folder.id)) {
+      jsonEdit.delete(folder.id);
+    } else {
+      jsonEdit.set(folder.id, { text: JSON.stringify(folder.rules, null, 2), error: null });
+    }
+    renderTabs();
   });
 
   const removeBtn = document.createElement("button");
   removeBtn.textContent = "Remove";
   removeBtn.addEventListener("click", () => {
     folders.splice(index, 1);
+    jsonEdit.delete(folder.id);
     renderTabs();
   });
 
   header.appendChild(nameInput);
-  header.appendChild(matchSelect);
+  header.appendChild(jsonBtn);
   header.appendChild(removeBtn);
+  div.appendChild(header);
+
+  div.appendChild(
+    jsonEdit.has(folder.id)
+      ? renderFolderJsonEditor(folder)
+      : renderGroupEditor(folder.rules, true, null)
+  );
+  return div;
+}
+
+function renderGroupEditor(
+  group: RuleGroup,
+  isRoot: boolean,
+  onRemove: (() => void) | null
+): HTMLElement {
+  const div = document.createElement("div");
+  div.className = isRoot ? "rule-group rule-group-root" : "rule-group";
+
+  const header = document.createElement("div");
+  header.className = "group-header";
+
+  const matchSelect = document.createElement("select");
+  const matchModes: Array<{ value: MatchMode; label: string }> = [
+    { value: "all", label: "Match ALL" },
+    { value: "any", label: "Match ANY" },
+    { value: "none", label: "Match NONE (exclude)" },
+  ];
+  matchModes.forEach(({ value, label }) => {
+    const opt = document.createElement("option");
+    opt.value = value;
+    opt.textContent = label;
+    if (group.match === value) opt.selected = true;
+    matchSelect.appendChild(opt);
+  });
+  matchSelect.addEventListener("change", () => {
+    group.match = matchSelect.value as MatchMode;
+  });
+  header.appendChild(matchSelect);
+
+  if (!isRoot && onRemove) {
+    const removeBtn = document.createElement("button");
+    removeBtn.textContent = "×";
+    removeBtn.title = "Remove group";
+    removeBtn.addEventListener("click", onRemove);
+    header.appendChild(removeBtn);
+  }
   div.appendChild(header);
 
   const conditionsDiv = document.createElement("div");
   conditionsDiv.className = "conditions";
 
-  folder.rules.conditions.forEach((condition, ci) => {
-    conditionsDiv.appendChild(renderConditionEditor(condition, index, ci));
+  if (group.conditions.length === 0) {
+    conditionsDiv.appendChild(hint("Empty groups never match."));
+  }
+  group.conditions.forEach((node, i) => {
+    const remove = () => {
+      group.conditions.splice(i, 1);
+      renderTabs();
+    };
+    conditionsDiv.appendChild(
+      isRuleGroup(node)
+        ? renderGroupEditor(node, false, remove)
+        : renderConditionEditor(node, remove)
+    );
   });
+  div.appendChild(conditionsDiv);
+
+  const buttons = document.createElement("div");
+  buttons.className = "group-buttons";
 
   const addCondBtn = document.createElement("button");
   addCondBtn.textContent = "+ Add condition";
   addCondBtn.addEventListener("click", () => {
-    folders[index].rules.conditions.push({ type: "tag", value: "" });
+    group.conditions.push({ type: "tag", value: "" });
     renderTabs();
   });
+  buttons.appendChild(addCondBtn);
 
-  div.appendChild(conditionsDiv);
-  div.appendChild(addCondBtn);
+  const addGroupBtn = document.createElement("button");
+  addGroupBtn.textContent = "+ Add group";
+  addGroupBtn.addEventListener("click", () => {
+    group.conditions.push({ match: "any", conditions: [] });
+    renderTabs();
+  });
+  buttons.appendChild(addGroupBtn);
+
+  div.appendChild(buttons);
   return div;
 }
 
-function renderConditionEditor(
-  condition: RuleCondition,
-  folderIndex: number,
-  conditionIndex: number
-): HTMLElement {
+function renderConditionEditor(condition: RuleCondition, onRemove: () => void): HTMLElement {
   const div = document.createElement("div");
   div.className = "condition";
 
@@ -699,8 +839,7 @@ function renderConditionEditor(
     typeSelect.appendChild(opt);
   });
   typeSelect.addEventListener("change", () => {
-    folders[folderIndex].rules.conditions[conditionIndex].type =
-      typeSelect.value as RuleCondition["type"];
+    condition.type = typeSelect.value as RuleCondition["type"];
   });
 
   const valueInput = document.createElement("input");
@@ -708,15 +847,12 @@ function renderConditionEditor(
   valueInput.value = condition.value;
   valueInput.placeholder = "Value";
   valueInput.addEventListener("input", () => {
-    folders[folderIndex].rules.conditions[conditionIndex].value = valueInput.value;
+    condition.value = valueInput.value;
   });
 
   const removeBtn = document.createElement("button");
   removeBtn.textContent = "×";
-  removeBtn.addEventListener("click", () => {
-    folders[folderIndex].rules.conditions.splice(conditionIndex, 1);
-    renderTabs();
-  });
+  removeBtn.addEventListener("click", onRemove);
 
   div.appendChild(typeSelect);
   div.appendChild(valueInput);
@@ -724,15 +860,191 @@ function renderConditionEditor(
   return div;
 }
 
+// ---- Per-folder JSON editor ---------------------------------------------------
+
+function renderFolderJsonEditor(folder: Folder): HTMLElement {
+  const state = jsonEdit.get(folder.id)!;
+
+  const div = document.createElement("div");
+  div.className = "json-editor";
+
+  const textarea = document.createElement("textarea");
+  textarea.rows = 12;
+  textarea.value = state.text;
+  textarea.addEventListener("input", () => {
+    state.text = textarea.value;
+  });
+  div.appendChild(textarea);
+
+  if (state.error) {
+    const error = document.createElement("p");
+    error.className = "inline-error";
+    error.textContent = state.error;
+    div.appendChild(error);
+  }
+
+  const buttons = document.createElement("div");
+  buttons.className = "group-buttons";
+
+  const applyBtn = document.createElement("button");
+  applyBtn.textContent = "Apply";
+  applyBtn.addEventListener("click", () => {
+    const error = applyJsonEdit(folder, state);
+    if (error) state.error = error;
+    renderTabs();
+  });
+  buttons.appendChild(applyBtn);
+
+  const cancelBtn = document.createElement("button");
+  cancelBtn.textContent = "Cancel";
+  cancelBtn.addEventListener("click", () => {
+    jsonEdit.delete(folder.id);
+    renderTabs();
+  });
+  buttons.appendChild(cancelBtn);
+
+  div.appendChild(buttons);
+  return div;
+}
+
+// Parses and applies a folder's pending JSON edit. Returns an error message, or
+// null on success (the folder's rules are replaced and the editor closed).
+function applyJsonEdit(folder: Folder, state: { text: string; error: string | null }): string | null {
+  let data: unknown;
+  try {
+    data = JSON.parse(state.text);
+  } catch (e) {
+    return `Invalid JSON: ${e instanceof Error ? e.message : String(e)}`;
+  }
+  const result = parseRuleGroup(data);
+  if (!result.valid || !result.group) {
+    return result.errors.join("\n");
+  }
+  folder.rules = result.group;
+  jsonEdit.delete(folder.id);
+  return null;
+}
+
+// Applies all open JSON editors before saving. Returns true when every pending
+// edit parsed cleanly; on failure the offending editors show inline errors.
+function applyPendingJsonEdits(): boolean {
+  let ok = true;
+  for (const [folderId, state] of jsonEdit) {
+    const folder = folders.find((f) => f.id === folderId);
+    if (!folder) {
+      jsonEdit.delete(folderId);
+      continue;
+    }
+    const error = applyJsonEdit(folder, state);
+    if (error) {
+      state.error = error;
+      ok = false;
+    }
+  }
+  return ok;
+}
+
 function addFolder(): void {
   const newFolder: Folder = {
     id: crypto.randomUUID(),
     name: "",
-    rules: { match: "any", conditions: [] } as FolderRules,
+    rules: { match: "any", conditions: [] },
     bookmark_ids: [],
   };
   folders.push(newFolder);
   renderTabs();
+}
+
+// ---- Folder export / import ---------------------------------------------------
+
+function renderFolderBackupSection(): HTMLElement {
+  const div = document.createElement("div");
+  div.className = "folder-backup";
+
+  div.appendChild(sectionHeading("Export / Import"));
+  div.appendChild(
+    hint(
+      "Export downloads all folder definitions as a JSON file (without the computed bookmark " +
+      "lists). Import replaces all folders with the pasted or loaded JSON — like every change " +
+      "on this page, nothing is persisted until you press Save."
+    )
+  );
+
+  const exportBtn = document.createElement("button");
+  exportBtn.textContent = "Export folders";
+  exportBtn.addEventListener("click", exportFolders);
+  div.appendChild(exportBtn);
+
+  const importLabel = document.createElement("label");
+  importLabel.textContent = "Import from file";
+  const fileInput = document.createElement("input");
+  fileInput.type = "file";
+  fileInput.accept = ".json,application/json";
+  importLabel.appendChild(fileInput);
+  div.appendChild(importLabel);
+
+  const textarea = document.createElement("textarea");
+  textarea.rows = 8;
+  textarea.placeholder = '[{"name":"Dev","rules":{"match":"any","conditions":[{"type":"tag","value":"dev"}]}}]';
+  div.appendChild(textarea);
+
+  fileInput.addEventListener("change", () => {
+    const file = fileInput.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      textarea.value = String(reader.result ?? "");
+    };
+    reader.readAsText(file);
+  });
+
+  const errorBox = document.createElement("p");
+  errorBox.className = "inline-error";
+  errorBox.hidden = true;
+  div.appendChild(errorBox);
+
+  const importBtn = document.createElement("button");
+  importBtn.textContent = "Import (replace all)";
+  importBtn.addEventListener("click", () => {
+    // On failure, show errors in place (no re-render, so the textarea survives).
+    const showError = (message: string) => {
+      errorBox.textContent = message;
+      errorBox.hidden = false;
+    };
+    let data: unknown;
+    try {
+      data = JSON.parse(textarea.value);
+    } catch (e) {
+      showError(`Invalid JSON: ${e instanceof Error ? e.message : String(e)}`);
+      return;
+    }
+    const result = parseFolders(data);
+    if (!result.valid) {
+      showError(result.errors.join("\n"));
+      return;
+    }
+    const confirmed = confirm(
+      `Replace all ${folders.length} existing folders with ${result.folders.length} imported folders?`
+    );
+    if (!confirmed) return;
+    folders = result.folders;
+    jsonEdit.clear();
+    renderTabs();
+  });
+  div.appendChild(importBtn);
+
+  return div;
+}
+
+function exportFolders(): void {
+  const data = folders.map(({ bookmark_ids: _, ...rest }) => rest);
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `bookmarks-plus-folders-${new Date().toISOString().slice(0, 10)}.json`;
+  a.click();
+  URL.revokeObjectURL(url);
 }
 
 // ---- Permissions helpers ----------------------------------------------------

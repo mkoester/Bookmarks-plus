@@ -62,15 +62,23 @@
 - Debounced: won't sync more than once per minute
 - Full sync always: iterates all configured providers, merges results into a single `BookmarkMap`
 
-**Folder rules**
+**Folder rules** (nested groups since 2026-07-04)
 ```typescript
-interface FolderRules {
-  match: "all" | "any";   // AND / OR
-  conditions: RuleCondition[];
-}
+type MatchMode = "all" | "any" | "none";
+interface RuleGroup { match: MatchMode; conditions: RuleNode[]; }
+type RuleNode = RuleCondition | RuleGroup;   // leaf has type+value, group has match+conditions
+type FolderRules = RuleGroup;                // a folder's rules = the root group
 type ConditionType = "tag" | "url_contains" | "title_contains";
 ```
-A bookmark can appear in multiple folders. No "uncategorized" folder.
+Groups nest arbitrarily → `A AND (B OR C)` etc. Semantics (`matchesNode` in `shared/bookmarks.ts`), uniform at every level:
+
+| match  | empty conditions | non-empty conditions            |
+|--------|------------------|---------------------------------|
+| `all`  | false            | every child matches (AND)       |
+| `any`  | false            | at least one child matches (OR) |
+| `none` | false            | no child matches (NOT(A OR B…)) |
+
+Empty groups never match — deliberately **not** vacuous truth for `all`, so a half-built group can't silently match everything. **No migration needed**: the old flat `{match: "all"|"any", conditions: RuleCondition[]}` is structurally valid in the new format (json-rules-engine-style; JsonLogic was considered and rejected as too generic/verbose). Rules are validated by `parseRuleGroup`/`parseFolders` in `shared/validation.ts` (used by the options JSON editors, folder import, and defensively by `getFolders`). A bookmark can appear in multiple folders. No "uncategorized" folder.
 
 **Browser API abstraction**
 - `shared/browser.ts` exports a single `ext` object — `browser` in Firefox, `chrome` in Chrome
@@ -105,11 +113,14 @@ shared/
   types.ts            — all TypeScript interfaces and the ProviderConfig union
   browser.ts          — Firefox/Chrome API shim
   storage.ts          — storage read/write helpers, storage warning logic
-  bookmarks.ts        — bookmarksToMap, mergeIntoMap, computeFolderMembership,
-                        safeFolderBookmarks (pure logic, unit-tested)
+  bookmarks.ts        — bookmarksToMap, mergeIntoMap, matchesNode (recursive rule
+                        evaluation), computeFolderMembership, safeFolderBookmarks
+                        (pure logic, unit-tested)
   folderList.ts       — shared folder/bookmark DOM rendering for popup/sidebar/newtab
                         (renderFolderDetails/renderBookmarkItem; open behaviour injected via callbacks)
-  validation.ts       — validateBookmarks() + entryToBookmark() for the JSON provider
+  validation.ts       — validateBookmarks() + entryToBookmark() for the JSON provider;
+                        parseRuleGroup()/parseFolders() for folder rules (JSON editor,
+                        import, defensive getFolders)
   providers/
     index.ts          — createProvider(config) factory
     static.ts         — StaticProvider
@@ -117,7 +128,10 @@ shared/
     browser.ts        — BrowserProvider (chrome.bookmarks, requests permission lazily)
     linkding.ts       — LinkdingProvider (paginated Linkding REST API)
   data/
-    static.ts         — STATIC_BOOKMARKS (17 items) + STATIC_FOLDERS (Crowdsourcing, Fediverse)
+    static.ts         — STATIC_BOOKMARKS (17 items) + STATIC_FOLDERS (Crowdsourcing, Fediverse,
+                        plus two nested-rule showcases: "Community (not social media nor
+                        crowdsourcing)" = community AND NOT (social-media OR crowdsourcing),
+                        "Open knowledge" = knowledge AND (education OR opensource))
 
 src/
   background/background.ts   — service worker: provider loop, alarms, message handler
@@ -131,7 +145,9 @@ src/
                                tab, middle-click folder opens all in background tabs;
                                Chromium side-panel toggle port
   sidebar/sidebar.html/css
-  options/options.ts         — provider management UI + folder/rule editor
+  options/options.ts         — provider management UI + recursive folder/rule editor,
+                               per-folder JSON editor, folder export/import (replace-all,
+                               staged in memory until Save), collapsed boolean-logic help
   options/options.html/css
   onboarding/onboarding.ts   — first-run welcome page, runtime-tailored per browser/target
   onboarding/onboarding.html/css

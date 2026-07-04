@@ -6,9 +6,17 @@ the Chrome Web Store (CWS). Pairs with `CLAUDE.md` (architecture) and `PRIVACY.m
 
 ## Current status
 
-- **Version:** 1.0.2 (single source of truth = `package.json`; injected into each
-  manifest at build). 1.0.2 = pre-submission cleanup: shared folder-rendering
-  helper (`shared/folderList.ts`), unit tests wired into `pnpm build`, doc fixes.
+- **Version:** 1.1.0 (single source of truth = `package.json`; injected into each
+  manifest at build). 1.1.0 = nested folder rules: rule groups nest arbitrarily
+  (`A AND (B OR C)`), new "Match NONE (exclude)" mode, per-folder "Edit as JSON",
+  export/import of all folder definitions as JSON (replace-all), options-page
+  header (logo + version, upper right), two nested-rule demo folders in the
+  static data ("Community (not social media nor crowdsourcing)", "Open knowledge"), and a
+  collapsed boolean-logic help (`<details>`) on the Folders tab. Old flat
+  rules load unchanged (no migration). 1.0.2 was pre-submission cleanup: shared
+  folder-rendering helper (`shared/folderList.ts`), unit tests wired into
+  `pnpm build`, doc fixes. 1.0.1 is live on AMO:
+  https://addons.mozilla.org/en-US/firefox/addon/bookmarks-plus/
 - **Code state:** release-ready pending a manual re-test in both browsers (the
   render code was refactored). `pnpm build` (type-check + tests + 3 targets)
   clean. AMO `web-ext lint`: **0 errors, 3 benign warnings** (see below).

@@ -2,6 +2,7 @@ import ext from "./browser";
 import type { BookmarkMap, Folder, Settings, StorageSchema, SyncStatus } from "./types";
 import { DEFAULT_SETTINGS } from "./types";
 import { STATIC_FOLDERS } from "./data/static";
+import { parseFolders } from "./validation";
 
 export async function getSettings(): Promise<Settings> {
   const result = await ext.storage.local.get("settings");
@@ -22,7 +23,17 @@ export async function getBookmarks(): Promise<BookmarkMap> {
 
 export async function getFolders(): Promise<Folder[]> {
   const result = await ext.storage.local.get("folders");
-  return (result.folders as Folder[]) ?? STATIC_FOLDERS;
+  if (result.folders === undefined) return STATIC_FOLDERS;
+  // An empty list is a legitimate saved state (parseFolders rejects it only to
+  // protect imports from wiping folders by accident).
+  if (Array.isArray(result.folders) && result.folders.length === 0) return [];
+  // Validate instead of blindly casting; keep the parseable entries and warn
+  // about the rest (membership is recomputed at sync, so nothing else breaks).
+  const parsed = parseFolders(result.folders);
+  if (!parsed.valid) {
+    console.warn("Ignoring invalid stored folders:", parsed.errors);
+  }
+  return parsed.folders;
 }
 
 export async function saveFolders(folders: Folder[]): Promise<void> {

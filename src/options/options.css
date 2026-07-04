@@ -12,10 +12,33 @@ body {
   max-width: 640px;
 }
 
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1.5rem;
+}
+
 h1 {
   font-size: 1.25rem;
-  margin-bottom: 1.5rem;
   color: var(--fg-strong);
+}
+
+.header-meta {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.version {
+  font-family: monospace;
+  font-size: 0.8rem;
+  color: var(--fg-muted);
+}
+
+.header-logo {
+  width: 32px;
+  height: 32px;
 }
 
 h2 {
@@ -306,6 +329,105 @@ button:hover {
   padding: 0.25rem 0.5rem;
   background: var(--error-bg);
   border-color: var(--error-border);
+}
+
+/* ---- Boolean-logic help ---- */
+
+.logic-help {
+  font-size: 0.8rem;
+  color: var(--fg-muted);
+  margin-bottom: 0.75rem;
+}
+
+.logic-help summary {
+  cursor: pointer;
+  user-select: none;
+}
+
+.logic-help summary:hover {
+  color: var(--link);
+}
+
+.logic-help p,
+.logic-help ul {
+  margin: 0.5rem 0 0 1rem;
+}
+
+.logic-help li {
+  font-family: monospace;
+  margin-left: 1rem;
+  margin-bottom: 0.2rem;
+}
+
+/* ---- Rule groups (nested) ---- */
+
+.rule-group {
+  margin-left: 1rem;
+  padding-left: 0.75rem;
+  border-left: 2px solid var(--border);
+}
+
+.rule-group-root {
+  margin-left: 0;
+  padding-left: 0;
+  border-left: none;
+}
+
+.group-header {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+  margin-bottom: 0.5rem;
+}
+
+.group-header button {
+  padding: 0.25rem 0.5rem;
+  background: var(--error-bg);
+  border-color: var(--error-border);
+}
+
+.group-buttons {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+
+.conditions .hint {
+  margin-bottom: 0.25rem;
+}
+
+/* ---- Folder JSON editor + export/import ---- */
+
+.json-editor textarea,
+.folder-backup textarea {
+  width: 100%;
+  font-family: monospace;
+  font-size: 0.85rem;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--fg);
+  padding: 0.4rem 0.6rem;
+  margin-bottom: 0.5rem;
+}
+
+.inline-error {
+  font-size: 0.8rem;
+  white-space: pre-wrap;
+  color: var(--fg);
+  background: var(--error-bg);
+  border: 1px solid var(--error-border);
+  border-radius: 4px;
+  padding: 0.4rem 0.6rem;
+  margin-bottom: 0.5rem;
+}
+
+.folder-backup {
+  margin-top: 2rem;
+}
+
+.folder-backup button {
+  margin-bottom: 0.75rem;
 }
 
 #status {

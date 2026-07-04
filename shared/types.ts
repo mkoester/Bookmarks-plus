@@ -13,15 +13,26 @@ export type BookmarkMap = Record<string, Bookmark>;
 // ---- Folder rules -----------------------------------------------------------
 
 export type ConditionType = "tag" | "url_contains" | "title_contains";
+export type MatchMode = "all" | "any" | "none";
 
 export interface RuleCondition {
   type: ConditionType;
   value: string;
 }
 
-export interface FolderRules {
-  match: "all" | "any";
-  conditions: RuleCondition[];
+export interface RuleGroup {
+  match: MatchMode;
+  conditions: RuleNode[];
+}
+
+export type RuleNode = RuleCondition | RuleGroup;
+
+/** Back-compat alias: a folder's rules are the root group. Old flat data is valid as-is. */
+export type FolderRules = RuleGroup;
+
+// Discriminator: groups have `conditions`; leaves have `type` + `value`.
+export function isRuleGroup(node: RuleNode): node is RuleGroup {
+  return "conditions" in node;
 }
 
 export interface Folder {

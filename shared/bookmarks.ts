@@ -3,7 +3,9 @@ import type {
   BookmarkMap,
   Folder,
   RuleCondition,
+  RuleNode,
 } from "./types";
+import { isRuleGroup } from "./types";
 import { isAllowedBookmarkUrl } from "./url";
 
 // ---- Map conversion ---------------------------------------------------------
@@ -48,12 +50,31 @@ function matchesCondition(bookmark: Bookmark, condition: RuleCondition): boolean
   }
 }
 
+// Group semantics (uniform at every nesting level):
+//
+//   match  | empty conditions | non-empty conditions
+//   -------|------------------|---------------------------------
+//   all    | false            | every child matches (AND)
+//   any    | false            | at least one child matches (OR)
+//   none   | false            | no child matches (NOT(A OR B ...))
+//
+// Empty groups never match — deliberately not vacuous truth for "all",
+// so a half-built group can never silently match everything.
+export function matchesNode(bookmark: Bookmark, node: RuleNode): boolean {
+  if (!isRuleGroup(node)) return matchesCondition(bookmark, node);
+  if (node.conditions.length === 0) return false;
+  switch (node.match) {
+    case "all":
+      return node.conditions.every((c) => matchesNode(bookmark, c));
+    case "any":
+      return node.conditions.some((c) => matchesNode(bookmark, c));
+    case "none":
+      return !node.conditions.some((c) => matchesNode(bookmark, c));
+  }
+}
+
 function matchesFolder(bookmark: Bookmark, folder: Folder): boolean {
-  const { match, conditions } = folder.rules;
-  if (conditions.length === 0) return false;
-  return match === "all"
-    ? conditions.every((c) => matchesCondition(bookmark, c))
-    : conditions.some((c) => matchesCondition(bookmark, c));
+  return matchesNode(bookmark, folder.rules);
 }
 
 export function computeFolderMembership(

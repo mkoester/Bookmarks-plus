@@ -5,9 +5,11 @@ import {
   bookmarkMapToArray,
   mergeIntoMap,
   computeFolderMembership,
+  matchesNode,
   safeFolderBookmarks,
 } from "../shared/bookmarks";
-import type { Bookmark, Folder } from "../shared/types";
+import type { Bookmark, Folder, RuleGroup } from "../shared/types";
+import { STATIC_BOOKMARKS, STATIC_FOLDERS } from "../shared/data/static";
 
 function bm(id: string, overrides: Partial<Bookmark> = {}): Bookmark {
   return {
@@ -82,6 +84,133 @@ test("computeFolderMembership matches url_contains case-insensitively", () => {
     folder({ rules: { match: "any", conditions: [{ type: "url_contains", value: "github" }] } }),
   ]);
   assert.deepEqual(folders[0].bookmark_ids, ["a"]);
+});
+
+test("matchesNode: A AND (B OR C)", () => {
+  const rules: RuleGroup = {
+    match: "all",
+    conditions: [
+      { type: "tag", value: "dev" },
+      {
+        match: "any",
+        conditions: [
+          { type: "tag", value: "rust" },
+          { type: "url_contains", value: "github" },
+        ],
+      },
+    ],
+  };
+  assert.equal(matchesNode(bm("a", { tag_names: ["dev", "rust"] }), rules), true);
+  assert.equal(matchesNode(bm("b", { tag_names: ["dev"], url: "https://github.com/x" }), rules), true);
+  assert.equal(matchesNode(bm("c", { tag_names: ["dev"] }), rules), false); // A alone
+  assert.equal(matchesNode(bm("d", { tag_names: ["rust"] }), rules), false); // B without A
+});
+
+test("matchesNode: root 'none' matches bookmarks matching no condition", () => {
+  const rules: RuleGroup = {
+    match: "none",
+    conditions: [
+      { type: "tag", value: "archived" },
+      { type: "title_contains", value: "draft" },
+    ],
+  };
+  assert.equal(matchesNode(bm("a"), rules), true);
+  assert.equal(matchesNode(bm("b", { tag_names: ["archived"] }), rules), false);
+  assert.equal(matchesNode(bm("c", { title: "My Draft post" }), rules), false);
+});
+
+test("matchesNode: 'none' nested under 'all' (dev AND NOT (archived OR draft))", () => {
+  const rules: RuleGroup = {
+    match: "all",
+    conditions: [
+      { type: "tag", value: "dev" },
+      {
+        match: "none",
+        conditions: [
+          { type: "tag", value: "archived" },
+          { type: "title_contains", value: "draft" },
+        ],
+      },
+    ],
+  };
+  assert.equal(matchesNode(bm("a", { tag_names: ["dev"] }), rules), true);
+  assert.equal(matchesNode(bm("b", { tag_names: ["dev", "archived"] }), rules), false);
+  assert.equal(matchesNode(bm("c", { tag_names: ["dev"], title: "Draft ideas" }), rules), false);
+  assert.equal(matchesNode(bm("d", { tag_names: ["news"] }), rules), false);
+});
+
+test("matchesNode: empty groups never match, at any level", () => {
+  const b = bm("a", { tag_names: ["dev"] });
+  // Empty roots in every mode
+  assert.equal(matchesNode(b, { match: "all", conditions: [] }), false);
+  assert.equal(matchesNode(b, { match: "any", conditions: [] }), false);
+  assert.equal(matchesNode(b, { match: "none", conditions: [] }), false);
+  // 'any' root still matches via the leaf despite an empty sibling group
+  const anyWithEmpty: RuleGroup = {
+    match: "any",
+    conditions: [{ match: "all", conditions: [] }, { type: "tag", value: "dev" }],
+  };
+  assert.equal(matchesNode(b, anyWithEmpty), true);
+  // 'all' root containing an empty group matches nothing
+  const allWithEmpty: RuleGroup = {
+    match: "all",
+    conditions: [{ type: "tag", value: "dev" }, { match: "any", conditions: [] }],
+  };
+  assert.equal(matchesNode(b, allWithEmpty), false);
+});
+
+test("matchesNode: deep nesting evaluates correctly", () => {
+  // dev AND (rust OR (news AND NOT weekly))
+  const rules: RuleGroup = {
+    match: "all",
+    conditions: [
+      { type: "tag", value: "dev" },
+      {
+        match: "any",
+        conditions: [
+          { type: "tag", value: "rust" },
+          {
+            match: "all",
+            conditions: [
+              { type: "tag", value: "news" },
+              { match: "none", conditions: [{ type: "title_contains", value: "weekly" }] },
+            ],
+          },
+        ],
+      },
+    ],
+  };
+  assert.equal(matchesNode(bm("a", { tag_names: ["dev", "news"] }), rules), true);
+  assert.equal(matchesNode(bm("b", { tag_names: ["dev", "news"], title: "Weekly digest" }), rules), false);
+  assert.equal(matchesNode(bm("c", { tag_names: ["dev", "rust"], title: "Weekly digest" }), rules), true);
+});
+
+test("computeFolderMembership: old flat-format rules keep working (regression)", () => {
+  // Shape exactly as persisted by pre-nesting versions.
+  const map = bookmarksToMap([
+    bm("a", { tag_names: ["dev"] }),
+    bm("b", { tag_names: ["news"] }),
+  ]);
+  const flat = folder({
+    rules: { match: "any", conditions: [{ type: "tag", value: "dev" }] },
+  });
+  const [result] = computeFolderMembership(map, [flat]);
+  assert.deepEqual(result.bookmark_ids, ["a"]);
+});
+
+test("static demo folders: nested rules match the expected demo bookmarks", () => {
+  const map = bookmarksToMap(STATIC_BOOKMARKS);
+  const byName = Object.fromEntries(
+    computeFolderMembership(map, STATIC_FOLDERS).map((f) => [f.name, f.bookmark_ids])
+  );
+  // community AND NOT (social-media OR crowdsourcing): Lemmy (11), Tildes (12),
+  // Wikipedia (1), and OpenStreetMap (5) are excluded.
+  assert.deepEqual(
+    byName["Community (not social media nor crowdsourcing)"],
+    ["6", "8", "17"]
+  );
+  // knowledge AND (education OR opensource): Khan Academy + Creative Commons.
+  assert.deepEqual(byName["Open knowledge"], ["7", "8"]);
 });
 
 test("safeFolderBookmarks drops missing ids and unsafe URLs", () => {
