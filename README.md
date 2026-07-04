@@ -8,14 +8,15 @@ Browser extension for [Linkding](https://github.com/sissbruecker/linkding) — d
 - Popup for quick access
 - Folder rules: match bookmarks by tag, URL, title, or source provider with
   nested ALL/ANY/NONE groups (e.g. `A AND (B OR C)`, or "everything except…");
-  rules editable as JSON per folder, and all folder definitions
-  exportable/importable as JSON
+  optional per-folder "latest N" limit; rules editable as JSON per folder, and
+  all folder definitions exportable/importable as JSON
 - Background sync on timer + on New Tab open (full sync each time; incremental
   sync via Linkding's `modified_since` is a possible future optimisation)
 - Import your browser's own bookmarks (folder names become tags)
-- Subscribe to [JSON Feeds](https://www.jsonfeed.org/) — a feed's current items
-  appear as bookmarks (linkblog `external_url` supported), pair with a
-  provider folder rule for a "latest from X" folder
+- Subscribe to web feeds — RSS 2.0/1.0, Atom, or [JSON Feed](https://www.jsonfeed.org/),
+  auto-detected — a feed's current items appear as bookmarks (categories become
+  tags, linkblog `external_url` supported), pair with a provider folder rule
+  for a "latest from X" folder
 - Static demo data mode (no Linkding instance needed)
 - Firefox + Chrome from one codebase
 

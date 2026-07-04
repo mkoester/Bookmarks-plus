@@ -32,6 +32,11 @@
 - `Folder.bookmark_ids: string[]`
 - This prevents ID collisions across providers
 
+**Bookmark dates & "latest N" limits (since 1.1.3)**
+- `Bookmark.date?: string` (ISO) — when the provider knows it: linkding `date_added`, browser `dateAdded`, RSS `pubDate`/RDF `dc:date`/Atom `published|updated`, JSON Feed `date_published|date_modified`, JSON-paste optional `date`. Normalised via `toIsoDate()` (validation.ts); unparseable → absent, never garbage.
+- `Folder.limit?: number` — show only the newest N matches. Applied in `computeFolderMembership` via `latestN()` (bookmarks.ts): sort by date desc, undated last in input order (= feed order, conventionally newest-first). Editor: the small "Latest N" number input in the folder header; validated by `parseFolders` (positive integer).
+- `FeedProviderConfig.maxItems?: number` — per-feed cap applied at sync time (also `latestN`), for feeds that ship 150+ items. Empty = keep all.
+
 **Provider system**
 - Each bookmark source is a `BookmarkProvider` (interface in `shared/types.ts`): `sync(): Promise<Bookmark[]>`
 - Provider configs (stored in `Settings.providers`) are a discriminated union on `type`: `"static" | "json" | "browser" | "linkding" | "jsonfeed"`
@@ -43,7 +48,10 @@
 2. **JSON** (`shared/providers/json.ts`) — user pastes a JSON array; format: `{ id?, url, title, tag_names?, favicon_url? }[]`; validated by `shared/validation.ts`
 3. **Browser** (`shared/providers/browser.ts`) — uses `ext.bookmarks.getTree()`; ancestor folder names become `tag_names`; requests `bookmarks` optional permission at first sync
 4. **Linkding** (`shared/providers/linkding.ts`) — full paginated sync against the Linkding REST API
-5. **JSON Feed** (`shared/providers/jsonfeed.ts`) — fetches a [JSON Feed](https://www.jsonfeed.org/version/1.1/) URL; the feed's *current items* become bookmarks (full sync mirrors the feed, so items age out naturally). Mapping lives in `parseJsonFeed` (`shared/validation.ts`, pure/unit-tested): accepts version 1 and 1.1; `preferExternalUrl` (config, default true) picks `external_url` over `url` for linkblogs; title falls back to `content_text` → stripped `content_html` (regex — **no DOMParser in the Chrome MV3 service worker**) → URL, truncated at 80 chars; feed-level `favicon` applies to all items; items without a safe URL are skipped (debug-logged). Host permission for the feed origin is requested on Save via the same mechanism as Linkding (`remoteProviderUrl`/`remoteProviderOrigins` in options.ts). Deliberately JSON Feed only, not RSS/Atom — XML parsing needs an offscreen document on Chrome MV3; revisit if actually wanted.
+5. **Web feed** (`shared/providers/feed.ts`, `FeedProvider`) — fetches a feed URL and **auto-detects the format** by sniffing the body (`{` → JSON Feed, `<` → XML: RSS 2.0/0.9x, RSS 1.0 RDF, Atom 1.0). The feed's *current items* become bookmarks (full sync mirrors the feed, so items age out naturally). Config type is `"feed"`; **`"jsonfeed"` is a legacy alias** (pre-RSS, v1.1.2, never store-released) accepted everywhere via `isFeedProvider()` — don't remove it.
+   - **JSON Feed** mapping: `parseJsonFeed` (`shared/validation.ts`, pure/unit-tested); versions 1 + 1.1; `preferExternalUrl` (config, default true) picks `external_url` over `url` for linkblogs (JSON-Feed-only concept, no-op for XML); feed-level `favicon` applies to all items.
+   - **RSS/Atom** mapping: `parseXmlFeed` (`shared/rss.ts`, pure/unit-tested) using **fast-xml-parser** — the repo's first and only runtime dependency, chosen deliberately: **the Chrome MV3 service worker has no DOMParser** (Firefox's event page does), and an offscreen-document split would fork the code path per browser *and* make the mapping untestable in node. `removeNSPrefix` folds `rdf:`/`dc:` so RDF shares the RSS item mapping; RSS `<guid isPermaLink="false">` is an id but never a URL; Atom picks the `rel="alternate"` (or rel-less) link; categories/`dc:subject`/`term` → tags.
+   - Shared for both: title fallback `deriveTitle` in validation.ts (explicit → text content → regex-stripped HTML → URL, 80-char cap, entity decoding); items without a safe URL (`isAllowedBookmarkUrl`) are skipped (debug-logged); parse failure → throw → sync error banner. **Encoding**: `decodeFeedBytes` (`shared/rss.ts`) re-decodes via the XML-prolog `encoding=` when no HTTP charset header is present (`response.text()` never reads the prolog; old German feeds still ship iso-8859-1). Host permission for the feed origin is requested on Save via the same mechanism as Linkding (`remoteProviderUrl`/`remoteProviderOrigins` in options.ts).
 
 **Storage layout** (`chrome.storage.local` / `browser.storage.local`)
 - Bookmarks stored as `BookmarkMap` — flat `Record<string, Bookmark>` keyed by namespaced ID
@@ -115,21 +123,25 @@ shared/
   browser.ts          — Firefox/Chrome API shim
   storage.ts          — storage read/write helpers, storage warning logic
   bookmarks.ts        — bookmarksToMap, mergeIntoMap, matchesNode (recursive rule
-                        evaluation), computeFolderMembership, safeFolderBookmarks
+                        evaluation), computeFolderMembership (applies Folder.limit),
+                        latestN (newest-by-date), safeFolderBookmarks
                         (pure logic, unit-tested)
   folderList.ts       — shared folder/bookmark DOM rendering for popup/sidebar/newtab
                         (renderFolderDetails/renderBookmarkItem; open behaviour injected via callbacks)
   validation.ts       — validateBookmarks() + entryToBookmark() for the JSON provider;
-                        parseJsonFeed() for the JSON Feed provider (item→Bookmark mapping,
-                        title fallback, entity decoding); parseRuleGroup()/parseFolders()
+                        parseJsonFeed() (JSON Feed mapping) + shared feed-title helpers
+                        (deriveTitle/stripHtml/decodeEntities); parseRuleGroup()/parseFolders()
                         for folder rules (JSON editor, import, defensive getFolders)
+  rss.ts              — parseXmlFeed() (RSS 2.0/0.9x, RDF, Atom → Bookmarks via
+                        fast-xml-parser) + decodeFeedBytes() (XML-prolog encoding)
   providers/
     index.ts          — createProvider(config) factory
     static.ts         — StaticProvider
     json.ts           — JsonProvider
     browser.ts        — BrowserProvider (chrome.bookmarks, requests permission lazily)
     linkding.ts       — LinkdingProvider (paginated Linkding REST API)
-    jsonfeed.ts       — JsonFeedProvider (fetches a JSON Feed URL; mapping in validation.ts)
+    feed.ts           — FeedProvider (web feed URL; sniffs JSON Feed vs RSS/Atom,
+                        encoding-aware decode; mappings in validation.ts / rss.ts)
   data/
     static.ts         — STATIC_BOOKMARKS (17 items) + STATIC_FOLDERS (Crowdsourcing, Fediverse,
                         plus two nested-rule showcases: "Community (not social media nor

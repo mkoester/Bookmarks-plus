@@ -6,8 +6,20 @@ the Chrome Web Store (CWS). Pairs with `CLAUDE.md` (architecture) and `PRIVACY.m
 
 ## Current status
 
-- **Version:** 1.1.2 (single source of truth = `package.json`; injected into each
-  manifest at build). 1.1.2 = JSON Feed provider: subscribe to a feed URL, its
+- **Version:** 1.1.3 (single source of truth = `package.json`; injected into each
+  manifest at build). 1.1.3 = RSS/Atom support, dates & limits: the JSON Feed
+  provider became a unified **"Web feed"** provider (config type `feed`;
+  `jsonfeed` kept as legacy alias) that auto-detects RSS 2.0/0.9x, RSS 1.0
+  (RDF), Atom 1.0, or JSON Feed; categories become tags; XML-prolog encoding
+  honoured (iso-8859-1 feeds). **First runtime dependency: `fast-xml-parser`
+  (MIT)** — needed because Chrome's MV3 service worker has no DOMParser; ships
+  as readable source in the unminified build (mention in AMO reviewer note if
+  asked about third-party code). Plus `Bookmark.date` (ISO, from every provider
+  that knows it), per-folder **"Latest N"** limit (newest matches by date,
+  undated last; "Latest [All]" input in the folder header), per-feed **max
+  items** cap, and an honest provider panel (shows synced link count, live-feed
+  wording for feeds, "no tags" no longer claims "no bookmarks").
+  1.1.2 = JSON Feed provider: subscribe to a feed URL, its
   current items show as bookmarks (mirrors the feed each sync); linkblog
   `external_url` preference (checkbox, default on), title fallback for untitled
   microblog posts, feed favicon, host permission requested on Save like

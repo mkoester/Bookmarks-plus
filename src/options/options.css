@@ -308,6 +308,19 @@ button:hover {
   flex: 1;
 }
 
+.folder-header label.folder-limit {
+  flex: 0 0 auto;
+  flex-direction: row;
+  align-items: center;
+  gap: 0.35rem;
+  margin-bottom: 0;
+  font-size: 0.85rem;
+}
+
+.folder-header input.folder-limit-input {
+  flex: 0 0 4.5rem;
+}
+
 .conditions {
   display: flex;
   flex-direction: column;

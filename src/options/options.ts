@@ -4,7 +4,7 @@ import { applyStoredTheme, setTheme } from "@shared/theme";
 import type {
   BookmarkMap,
   Folder,
-  JsonFeedProviderConfig,
+  FeedProviderConfig,
   LinkdingProviderConfig,
   JsonProviderConfig,
   MatchMode,
@@ -140,7 +140,7 @@ function renderOverviewPanel(): HTMLElement {
     ["json", "JSON (paste your own)"],
     ["browser", "Browser bookmarks"],
     ["linkding", "Linkding"],
-    ["jsonfeed", "JSON Feed (subscribe to a feed URL)"],
+    ["feed", "Web feed (RSS, Atom, JSON Feed)"],
   ] as Array<[ProviderType, string]>)
     // static and browser are singletons — hide them from the menu once one exists
     .filter(([value]) => !(SINGLETON_PROVIDER_TYPES.has(value) && existingTypes.has(value)))
@@ -259,14 +259,38 @@ function renderProviderPanel(providerId: string): HTMLElement {
   const config = renderProviderConfig(provider, index);
   if (config) section.appendChild(config);
 
-  section.appendChild(sectionHeading("Tags"));
-  const tags = sortTagCounts(providerTagCounts(provider.id));
-  if (tags.length === 0) {
+  // Distinguish "nothing synced" from "synced but tagless", and remind that
+  // feed items are a changing list of links, not stored bookmarks.
+  const linkCount = providerBookmarkCount(provider.id);
+  section.appendChild(sectionHeading("Synced content"));
+  if (linkCount === 0) {
     section.appendChild(
-      hint("No synced bookmarks for this provider yet — save settings to sync, then reopen.")
+      hint("Nothing synced from this provider yet — save settings to trigger a sync, then reopen.")
+    );
+  } else if (isFeedProvider(provider)) {
+    section.appendChild(
+      hint(
+        `Currently ${linkCount} links from this feed. This is a live list, not stored ` +
+        "bookmarks — it changes whenever the site updates its feed."
+      )
     );
   } else {
-    section.appendChild(renderTagTable(tags));
+    section.appendChild(hint(`${linkCount} bookmarks synced from this provider.`));
+  }
+
+  const tags = sortTagCounts(providerTagCounts(provider.id));
+  if (linkCount > 0) {
+    section.appendChild(sectionHeading("Tags"));
+    if (tags.length === 0) {
+      section.appendChild(
+        hint(
+          "None of them have tags — a folder rule with a Provider condition still " +
+          "collects them into a folder."
+        )
+      );
+    } else {
+      section.appendChild(renderTagTable(tags));
+    }
   }
 
   const removeBtn = document.createElement("button");
@@ -284,7 +308,7 @@ function providerTabLabel(provider: ProviderConfig): string {
     return `linkding (${provider.username})`;
   }
   // Feeds show their host — subscribing to several feeds is the normal case.
-  if (provider.type === "jsonfeed" && provider.url) {
+  if (isFeedProvider(provider) && provider.url) {
     try {
       return `feed (${new URL(provider.url).hostname})`;
     } catch {
@@ -300,6 +324,11 @@ function providerTabLabel(provider: ProviderConfig): string {
 }
 
 // ---- Per-provider tag table -------------------------------------------------
+
+function providerBookmarkCount(providerId: string): number {
+  const prefix = `${providerId}:`;
+  return Object.keys(bookmarks).filter((id) => id.startsWith(prefix)).length;
+}
 
 function providerTagCounts(providerId: string): Array<{ tag: string; count: number }> {
   const prefix = `${providerId}:`;
@@ -523,10 +552,15 @@ async function revokeProviderPermissions(removed: ProviderConfig): Promise<void>
   }
 }
 
+// "jsonfeed" is the pre-RSS legacy alias for the unified feed provider.
+function isFeedProvider(provider: ProviderConfig): provider is FeedProviderConfig {
+  return provider.type === "feed" || provider.type === "jsonfeed";
+}
+
 // The user-configured URL of a provider that fetches from a remote origin (and
 // therefore needs a host permission), or null for local/pasted providers.
 function remoteProviderUrl(provider: ProviderConfig): string | null {
-  if ((provider.type === "linkding" || provider.type === "jsonfeed") && provider.url) {
+  if ((provider.type === "linkding" || isFeedProvider(provider)) && provider.url) {
     return provider.url;
   }
   return null;
@@ -547,8 +581,8 @@ function renderProviderConfig(provider: ProviderConfig, index: number): HTMLElem
   if (provider.type === "json") {
     return renderJsonConfig(provider, index);
   }
-  if (provider.type === "jsonfeed") {
-    return renderJsonFeedConfig(provider, index);
+  if (isFeedProvider(provider)) {
+    return renderFeedConfig(provider, index);
   }
   if (provider.type === "browser") {
     const note = document.createElement("p");
@@ -653,17 +687,17 @@ function renderJsonConfig(provider: JsonProviderConfig, index: number): HTMLElem
   return div;
 }
 
-function renderJsonFeedConfig(provider: JsonFeedProviderConfig, index: number): HTMLElement {
+function renderFeedConfig(provider: FeedProviderConfig, index: number): HTMLElement {
   const div = document.createElement("div");
   div.className = "provider-config";
 
   const note = document.createElement("p");
   note.className = "provider-note";
   note.textContent =
-    "Subscribes to a JSON Feed (jsonfeed.org) and shows its current items as bookmarks. " +
-    "Each sync mirrors the feed, so items that drop out of it disappear here too. Feed tags " +
-    "become bookmark tags, but many feeds set none — a folder rule matching this provider " +
-    "collects its items regardless.";
+    "Subscribes to a web feed — RSS, Atom, or JSON Feed, detected automatically — and shows " +
+    "its current items as bookmarks. Each sync mirrors the feed, so items that drop out of it " +
+    "disappear here too. Feed categories/tags become bookmark tags, but many feeds set none — " +
+    "a folder rule matching this provider collects its items regardless.";
   div.appendChild(note);
 
   const urlLabel = document.createElement("label");
@@ -671,9 +705,9 @@ function renderJsonFeedConfig(provider: JsonFeedProviderConfig, index: number): 
   const urlInput = document.createElement("input");
   urlInput.type = "url";
   urlInput.value = provider.url;
-  urlInput.placeholder = "https://example.com/feed.json";
+  urlInput.placeholder = "https://example.com/feed.xml";
   urlInput.addEventListener("input", () => {
-    (providers[index] as JsonFeedProviderConfig).url = urlInput.value.trim();
+    (providers[index] as FeedProviderConfig).url = urlInput.value.trim();
   });
   urlLabel.appendChild(urlInput);
   div.appendChild(urlLabel);
@@ -684,14 +718,33 @@ function renderJsonFeedConfig(provider: JsonFeedProviderConfig, index: number): 
   externalInput.type = "checkbox";
   externalInput.checked = provider.preferExternalUrl;
   externalInput.addEventListener("change", () => {
-    (providers[index] as JsonFeedProviderConfig).preferExternalUrl = externalInput.checked;
+    (providers[index] as FeedProviderConfig).preferExternalUrl = externalInput.checked;
   });
   externalLabel.appendChild(externalInput);
   externalLabel.append(
-    "Prefer the linked page over the feed's own post (linkblogs like Daring Fireball " +
-    "publish commentary posts that point at an external article)"
+    "Prefer the linked page over the feed's own post (JSON Feed linkblogs like Daring " +
+    "Fireball point their posts at an external article; RSS/Atom feeds are unaffected)"
   );
   div.appendChild(externalLabel);
+
+  const maxLabel = document.createElement("label");
+  maxLabel.textContent = "Maximum items to keep (empty = all; some feeds ship 150+)";
+  const maxInput = document.createElement("input");
+  maxInput.type = "number";
+  maxInput.min = "1";
+  maxInput.placeholder = "all";
+  maxInput.value = provider.maxItems !== undefined ? String(provider.maxItems) : "";
+  maxInput.addEventListener("input", () => {
+    const n = parseInt(maxInput.value, 10);
+    const config = providers[index] as FeedProviderConfig;
+    if (Number.isInteger(n) && n > 0) {
+      config.maxItems = n;
+    } else {
+      delete config.maxItems;
+    }
+  });
+  maxLabel.appendChild(maxInput);
+  div.appendChild(maxLabel);
 
   return div;
 }
@@ -707,7 +760,8 @@ function addProvider(type: ProviderType): void {
     case "json":    config = { ...base, type: "json", data: "" }; break;
     case "browser": config = { ...base, type: "browser" }; break;
     case "linkding": config = { ...base, type: "linkding", url: "", token: "" }; break;
-    case "jsonfeed": config = { ...base, type: "jsonfeed", url: "", preferExternalUrl: true }; break;
+    case "feed":     // "jsonfeed" is the legacy alias; the menu only offers "feed"
+    case "jsonfeed": config = { ...base, type: "feed", url: "", preferExternalUrl: true }; break;
   }
 
   providers.push(config);
@@ -780,6 +834,27 @@ function renderFolderEditor(folder: Folder, index: number): HTMLElement {
     folder.name = nameInput.value;
   });
 
+  const limitLabel = document.createElement("label");
+  limitLabel.className = "folder-limit";
+  limitLabel.title =
+    "Show only the newest N matching items (by date; undated items last). Empty = show all.";
+  limitLabel.append("Latest");
+  const limitInput = document.createElement("input");
+  limitInput.type = "number";
+  limitInput.className = "folder-limit-input";
+  limitInput.min = "1";
+  limitInput.placeholder = "All";
+  limitInput.value = folder.limit !== undefined ? String(folder.limit) : "";
+  limitInput.addEventListener("input", () => {
+    const n = parseInt(limitInput.value, 10);
+    if (Number.isInteger(n) && n > 0) {
+      folder.limit = n;
+    } else {
+      delete folder.limit;
+    }
+  });
+  limitLabel.appendChild(limitInput);
+
   const jsonBtn = document.createElement("button");
   jsonBtn.textContent = jsonEdit.has(folder.id) ? "Edit visually" : "Edit as JSON";
   jsonBtn.addEventListener("click", () => {
@@ -800,6 +875,7 @@ function renderFolderEditor(folder: Folder, index: number): HTMLElement {
   });
 
   header.appendChild(nameInput);
+  header.appendChild(limitLabel);
   header.appendChild(jsonBtn);
   header.appendChild(removeBtn);
   div.appendChild(header);

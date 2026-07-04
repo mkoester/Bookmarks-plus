@@ -42,6 +42,10 @@ function validateBookmarkEntry(b: unknown, index: number): string[] {
     }
   }
 
+  if ("date" in bookmark && toIsoDate(bookmark.date) === undefined) {
+    errors.push(`${prefix}: date must be a parseable date string when present`);
+  }
+
   return errors;
 }
 
@@ -178,6 +182,12 @@ export function parseFolders(data: unknown): FoldersParseResult {
     const rules = parseRuleGroup(obj.rules, `${prefix}.rules`);
     entryErrors.push(...rules.errors);
 
+    if ("limit" in obj && obj.limit !== undefined) {
+      if (typeof obj.limit !== "number" || !Number.isInteger(obj.limit) || obj.limit < 1) {
+        entryErrors.push(`${prefix}: limit must be a positive integer when present`);
+      }
+    }
+
     errors.push(...entryErrors);
     if (entryErrors.length > 0 || !rules.group) return;
 
@@ -186,6 +196,7 @@ export function parseFolders(data: unknown): FoldersParseResult {
       id,
       name: obj.name as string,
       rules: rules.group,
+      ...(typeof obj.limit === "number" ? { limit: obj.limit } : {}),
       // bookmark_ids is install-specific and recomputed at sync; keep it if
       // sane so defensive loads don't blank folders between syncs.
       bookmark_ids:
@@ -208,6 +219,14 @@ export interface JsonFeedParseResult {
 
 const MAX_DERIVED_TITLE_LENGTH = 80;
 
+// Normalises any parseable date string (RFC 3339, RFC 822 pubDate, …) to ISO,
+// or undefined — Bookmark.date is either trustworthy or absent.
+export function toIsoDate(value: unknown): string | undefined {
+  if (typeof value !== "string" || !value.trim()) return undefined;
+  const timestamp = Date.parse(value);
+  return Number.isNaN(timestamp) ? undefined : new Date(timestamp).toISOString();
+}
+
 // Minimal entity decoding for titles derived from content_html — no DOMParser
 // here: this must run in the Chrome MV3 service worker (and in node for tests).
 const NAMED_ENTITIES: Record<string, string> = {
@@ -216,7 +235,7 @@ const NAMED_ENTITIES: Record<string, string> = {
   hellip: "…", mdash: "—", ndash: "–",
 };
 
-function decodeEntities(text: string): string {
+export function decodeEntities(text: string): string {
   return text.replace(/&(#x?[0-9a-fA-F]+|[a-zA-Z]+);/g, (match, entity: string) => {
     if (entity.startsWith("#x") || entity.startsWith("#X")) {
       return String.fromCodePoint(parseInt(entity.slice(2), 16));
@@ -228,18 +247,23 @@ function decodeEntities(text: string): string {
   });
 }
 
-function stripHtml(html: string): string {
+export function stripHtml(html: string): string {
   return decodeEntities(html.replace(/<[^>]*>/g, " ")).replace(/\s+/g, " ").trim();
 }
 
-// Title fallback chain for items without a title (common on microblog feeds):
-// content_text, then stripped content_html, then the bookmarked URL itself.
-function jsonFeedItemTitle(item: Record<string, unknown>, url: string): string {
-  const explicit = typeof item.title === "string" ? item.title.trim() : "";
+// Title fallback chain for feed items without a title (common on microblog
+// feeds): explicit title, plain-text content, stripped HTML content, then the
+// bookmarked URL itself. Shared by the JSON Feed and RSS/Atom mappings.
+export function deriveTitle(
+  explicit: unknown,
+  contentText: unknown,
+  contentHtml: unknown,
+  url: string
+): string {
   const derived =
-    explicit ||
-    (typeof item.content_text === "string" ? item.content_text.replace(/\s+/g, " ").trim() : "") ||
-    (typeof item.content_html === "string" ? stripHtml(item.content_html) : "");
+    (typeof explicit === "string" ? explicit.replace(/\s+/g, " ").trim() : "") ||
+    (typeof contentText === "string" ? contentText.replace(/\s+/g, " ").trim() : "") ||
+    (typeof contentHtml === "string" ? stripHtml(contentHtml) : "");
   if (!derived) return url;
   return derived.length > MAX_DERIVED_TITLE_LENGTH
     ? `${derived.slice(0, MAX_DERIVED_TITLE_LENGTH - 1).trimEnd()}…`
@@ -281,14 +305,16 @@ export function parseJsonFeed(
       item.id !== undefined && item.id !== null && String(item.id).trim()
         ? String(item.id)
         : url;
+    const date = toIsoDate(item.date_published) ?? toIsoDate(item.date_modified);
     bookmarks.push({
       id: `${providerId}:${rawId}`,
       url,
-      title: jsonFeedItemTitle(item, url),
+      title: deriveTitle(item.title, item.content_text, item.content_html, url),
       tag_names: Array.isArray(item.tags)
         ? item.tags.filter((t): t is string => typeof t === "string" && t.trim() !== "")
         : [],
       ...(favicon ? { favicon_url: favicon } : {}),
+      ...(date ? { date } : {}),
     });
   });
 
@@ -307,6 +333,7 @@ export function entryToBookmark(
       ? String(entry.id)
       : String(index);
 
+  const date = toIsoDate(entry.date);
   return {
     id: `${providerId}:${rawId}`,
     url: entry.url as string,
@@ -315,5 +342,6 @@ export function entryToBookmark(
       ? (entry.tag_names as string[])
       : [],
     ...(typeof entry.favicon_url === "string" ? { favicon_url: entry.favicon_url } : {}),
+    ...(date ? { date } : {}),
   };
 }

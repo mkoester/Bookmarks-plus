@@ -6,6 +6,10 @@ export interface Bookmark {
   title: string;
   tag_names: string[];
   favicon_url?: string;
+  // ISO timestamp of when the item was added/published, when the provider
+  // knows it (linkding date_added, browser dateAdded, feed publish dates).
+  // Basis for the per-folder "latest N" limit.
+  date?: string;
 }
 
 export type BookmarkMap = Record<string, Bookmark>;
@@ -39,12 +43,14 @@ export interface Folder {
   id: string;
   name: string;
   rules: FolderRules;
+  // Show only the newest N matches (by Bookmark.date, undated last). Absent = all.
+  limit?: number;
   bookmark_ids: string[]; // precomputed at sync time
 }
 
 // ---- Provider configs -------------------------------------------------------
 
-export type ProviderType = "static" | "json" | "browser" | "linkding" | "jsonfeed";
+export type ProviderType = "static" | "json" | "browser" | "linkding" | "feed" | "jsonfeed";
 
 interface BaseProviderConfig {
   id: string;
@@ -72,12 +78,19 @@ export interface LinkdingProviderConfig extends BaseProviderConfig {
   username?: string; // display label only; not sent to the linkding API (token auth)
 }
 
-export interface JsonFeedProviderConfig extends BaseProviderConfig {
-  type: "jsonfeed";
+export interface FeedProviderConfig extends BaseProviderConfig {
+  // Web feed: JSON Feed, RSS, or Atom — auto-detected at sync time.
+  // "jsonfeed" is a legacy alias from before RSS/Atom support (never store-released,
+  // but may exist in local storage); treated identically everywhere.
+  type: "feed" | "jsonfeed";
   url: string;
-  // Linkblog feeds (e.g. Daring Fireball) set external_url to the linked page
+  // Linkblog JSON Feeds (e.g. Daring Fireball) set external_url to the linked page
   // and url to their own commentary permalink; this picks which one to bookmark.
+  // RSS/Atom have no such distinction — ignored there.
   preferExternalUrl: boolean;
+  // Keep only the newest N feed items at sync time (some feeds ship 150+).
+  // Absent = keep all.
+  maxItems?: number;
 }
 
 export type ProviderConfig =
@@ -85,7 +98,7 @@ export type ProviderConfig =
   | JsonProviderConfig
   | BrowserProviderConfig
   | LinkdingProviderConfig
-  | JsonFeedProviderConfig;
+  | FeedProviderConfig;
 
 // ---- Provider interface -----------------------------------------------------
 

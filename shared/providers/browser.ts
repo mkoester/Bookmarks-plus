@@ -37,6 +37,7 @@ export class BrowserProvider implements BookmarkProvider {
           url: node.url,
           title: node.title || node.url,
           tag_names: [...folderPath],
+          ...(node.dateAdded ? { date: new Date(node.dateAdded).toISOString() } : {}),
         });
       } else if (node.children) {
         const newPath = node.title ? [...folderPath, node.title] : folderPath;

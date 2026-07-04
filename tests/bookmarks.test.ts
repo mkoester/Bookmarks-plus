@@ -5,6 +5,7 @@ import {
   bookmarkMapToArray,
   mergeIntoMap,
   computeFolderMembership,
+  latestN,
   matchesNode,
   safeFolderBookmarks,
 } from "../shared/bookmarks";
@@ -236,6 +237,37 @@ test("static demo folders: nested rules match the expected demo bookmarks", () =
   );
   // knowledge AND (education OR opensource): Khan Academy + Creative Commons.
   assert.deepEqual(byName["Open knowledge"], ["7", "8"]);
+});
+
+test("latestN: newest first by date, undated keep input order at the end", () => {
+  const list = [
+    bm("old", { date: "2026-01-01T00:00:00Z" }),
+    bm("undated1"),
+    bm("new", { date: "2026-07-01T00:00:00Z" }),
+    bm("undated2"),
+    bm("mid", { date: "2026-03-01T00:00:00Z" }),
+  ];
+  assert.deepEqual(latestN(list, 3).map((b) => b.id), ["new", "mid", "old"]);
+  // n beyond dated items: undated fill up in input order
+  assert.deepEqual(latestN(list, 5).map((b) => b.id), ["new", "mid", "old", "undated1", "undated2"]);
+  // input not mutated
+  assert.equal(list[0].id, "old");
+});
+
+test("computeFolderMembership: folder limit keeps only the newest matches", () => {
+  const map = bookmarksToMap([
+    bm("a", { tag_names: ["dev"], date: "2026-01-01T00:00:00Z" }),
+    bm("b", { tag_names: ["dev"], date: "2026-07-01T00:00:00Z" }),
+    bm("c", { tag_names: ["dev"] }),
+    bm("d", { tag_names: ["news"], date: "2026-08-01T00:00:00Z" }),
+  ]);
+  const rules = { match: "any" as const, conditions: [{ type: "tag" as const, value: "dev" }] };
+  const [limited, unlimited] = computeFolderMembership(map, [
+    folder({ rules, limit: 2 }),
+    folder({ id: "f2", rules }),
+  ]);
+  assert.deepEqual(limited.bookmark_ids, ["b", "a"]); // d doesn't match, c is undated
+  assert.deepEqual(unlimited.bookmark_ids, ["a", "b", "c"]);
 });
 
 test("safeFolderBookmarks drops missing ids and unsafe URLs", () => {

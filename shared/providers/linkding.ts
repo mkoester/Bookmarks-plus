@@ -1,4 +1,5 @@
 import type { Bookmark, BookmarkProvider, LinkdingProviderConfig, LinkdingResponse } from "../types";
+import { toIsoDate } from "../validation";
 
 export class LinkdingProvider implements BookmarkProvider {
   constructor(private config: LinkdingProviderConfig) {}
@@ -10,12 +11,14 @@ export class LinkdingProvider implements BookmarkProvider {
     while (url) {
       const response = await this.fetchPage(url);
       for (const b of response.results) {
+        const date = toIsoDate(b.date_added);
         bookmarks.push({
           id: `${this.config.id}:${b.id}`,
           url: b.url,
           title: b.title || b.url,
           tag_names: b.tag_names,
           ...(b.favicon_url ? { favicon_url: b.favicon_url } : {}),
+          ...(date ? { date } : {}),
         });
       }
       url = response.next;

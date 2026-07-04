@@ -6,6 +6,7 @@ import {
   parseJsonFeed,
   parseRuleGroup,
   parseFolders,
+  toIsoDate,
 } from "../shared/validation";
 
 const valid = { url: "https://example.com", title: "Example" };
@@ -317,5 +318,59 @@ test("parseJsonFeed rejects documents without an items array", () => {
     assert.equal(result.valid, false);
     assert.match(result.errors[0], /not a JSON Feed/);
     assert.deepEqual(result.bookmarks, []);
+  }
+});
+
+// ---- toIsoDate / dates ---------------------------------------------------------
+
+test("toIsoDate normalises RFC 3339 and RFC 822, rejects garbage", () => {
+  assert.equal(toIsoDate("2026-07-03T14:55:01-05:00"), "2026-07-03T19:55:01.000Z");
+  assert.equal(toIsoDate("Thu, 02 Jul 2026 22:30:40 GMT"), "2026-07-02T22:30:40.000Z");
+  assert.equal(toIsoDate("not a date"), undefined);
+  assert.equal(toIsoDate(""), undefined);
+  assert.equal(toIsoDate(42), undefined);
+});
+
+test("parseJsonFeed maps date_published (date_modified fallback) to date", () => {
+  const feed = {
+    items: [
+      { url: "https://a.example/1", date_published: "2026-07-03T14:55:01-05:00" },
+      { url: "https://a.example/2", date_modified: "2026-07-01T00:00:00Z" },
+      { url: "https://a.example/3" },
+    ],
+  };
+  const result = parseJsonFeed(feed, "p", true);
+  assert.equal(result.bookmarks[0].date, "2026-07-03T19:55:01.000Z");
+  assert.equal(result.bookmarks[1].date, "2026-07-01T00:00:00.000Z");
+  assert.equal("date" in result.bookmarks[2], false);
+});
+
+test("entryToBookmark keeps a parseable date and drops an invalid one", () => {
+  const withDate = entryToBookmark({ ...valid, date: "2026-07-04" }, 0, "p");
+  assert.equal(withDate.date, "2026-07-04T00:00:00.000Z");
+  const badDate = entryToBookmark({ ...valid, date: "yesterday-ish" }, 0, "p");
+  assert.equal("date" in badDate, false);
+});
+
+test("validateBookmarks rejects an unparseable date", () => {
+  const result = validateBookmarks([{ ...valid, date: "not a date" }]);
+  assert.equal(result.valid, false);
+  assert.match(result.errors[0], /date/);
+});
+
+// ---- parseFolders limit ---------------------------------------------------------
+
+test("parseFolders accepts a positive integer limit and rejects other values", () => {
+  const ok = parseFolders([{ ...validFolder, limit: 5 }]);
+  assert.equal(ok.valid, true);
+  assert.equal(ok.folders[0].limit, 5);
+
+  const none = parseFolders([validFolder]);
+  assert.equal("limit" in none.folders[0], false);
+
+  for (const bad of [0, -1, 2.5, "5"]) {
+    const result = parseFolders([{ ...validFolder, limit: bad }]);
+    assert.equal(result.valid, false, `should reject limit ${JSON.stringify(bad)}`);
+    assert.match(result.errors[0], /limit must be a positive integer/);
   }
 });

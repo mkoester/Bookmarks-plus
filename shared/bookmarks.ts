@@ -80,15 +80,35 @@ function matchesFolder(bookmark: Bookmark, folder: Folder): boolean {
   return matchesNode(bookmark, folder.rules);
 }
 
+// The newest n bookmarks by date. Undated bookmarks sort last; ties (and the
+// undated tail) keep their input order — for feeds that is the feed's own
+// order, which is conventionally newest-first anyway. Also used by the feed
+// provider's per-feed maxItems cap.
+export function latestN(bookmarks: Bookmark[], n: number): Bookmark[] {
+  const timestamp = (b: Bookmark): number => {
+    const t = b.date ? Date.parse(b.date) : NaN;
+    return Number.isNaN(t) ? Number.NEGATIVE_INFINITY : t;
+  };
+  return [...bookmarks]
+    .sort((a, b) => {
+      const ta = timestamp(a);
+      const tb = timestamp(b);
+      if (tb > ta) return 1;
+      if (tb < ta) return -1;
+      return 0; // Array.prototype.sort is stable
+    })
+    .slice(0, n);
+}
+
 export function computeFolderMembership(
   bookmarkMap: BookmarkMap,
   folders: Folder[]
 ): Folder[] {
   const bookmarks = bookmarkMapToArray(bookmarkMap);
-  return folders.map((folder) => ({
-    ...folder,
-    bookmark_ids: bookmarks
-      .filter((b) => matchesFolder(b, folder))
-      .map((b) => b.id),
-  }));
+  return folders.map((folder) => {
+    const matched = bookmarks.filter((b) => matchesFolder(b, folder));
+    const chosen =
+      folder.limit !== undefined && folder.limit > 0 ? latestN(matched, folder.limit) : matched;
+    return { ...folder, bookmark_ids: chosen.map((b) => b.id) };
+  });
 }
