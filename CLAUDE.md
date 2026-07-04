@@ -68,9 +68,9 @@ type MatchMode = "all" | "any" | "none";
 interface RuleGroup { match: MatchMode; conditions: RuleNode[]; }
 type RuleNode = RuleCondition | RuleGroup;   // leaf has type+value, group has match+conditions
 type FolderRules = RuleGroup;                // a folder's rules = the root group
-type ConditionType = "tag" | "url_contains" | "title_contains";
+type ConditionType = "tag" | "url_contains" | "title_contains" | "provider";
 ```
-Groups nest arbitrarily → `A AND (B OR C)` etc. Semantics (`matchesNode` in `shared/bookmarks.ts`), uniform at every level:
+Groups nest arbitrarily → `A AND (B OR C)` etc. The `provider` condition's value is a **provider config id**; it matches via the namespace prefix of the bookmark id (`startsWith("${value}:")`), so no field was added to `Bookmark`. The options editor renders its value as a dropdown of configured providers (a value pointing at a removed provider is kept as an "Unknown provider" entry, never silently rewritten). Semantics (`matchesNode` in `shared/bookmarks.ts`), uniform at every level:
 
 | match  | empty conditions | non-empty conditions            |
 |--------|------------------|---------------------------------|

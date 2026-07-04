@@ -93,6 +93,16 @@ test("parseRuleGroup accepts nested groups and 'none'", () => {
   assert.deepEqual(result.group, rules);
 });
 
+test("parseRuleGroup accepts provider conditions", () => {
+  const rules = {
+    match: "any",
+    conditions: [{ type: "provider", value: "linkding-1" }],
+  };
+  const result = parseRuleGroup(rules);
+  assert.equal(result.valid, true);
+  assert.deepEqual(result.group, rules);
+});
+
 test("parseRuleGroup accepts empty conditions arrays", () => {
   const result = parseRuleGroup({ match: "any", conditions: [] });
   assert.equal(result.valid, true);

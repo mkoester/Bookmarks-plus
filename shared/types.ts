@@ -12,7 +12,7 @@ export type BookmarkMap = Record<string, Bookmark>;
 
 // ---- Folder rules -----------------------------------------------------------
 
-export type ConditionType = "tag" | "url_contains" | "title_contains";
+export type ConditionType = "tag" | "url_contains" | "title_contains" | "provider";
 export type MatchMode = "all" | "any" | "none";
 
 export interface RuleCondition {

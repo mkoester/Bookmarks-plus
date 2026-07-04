@@ -65,6 +65,7 @@ const CONDITION_TYPES: ReadonlySet<string> = new Set<ConditionType>([
   "tag",
   "url_contains",
   "title_contains",
+  "provider",
 ]);
 
 export interface RuleGroupParseResult {
@@ -93,7 +94,7 @@ function parseRuleNode(data: unknown, path: string): { errors: string[]; node: R
   if (isLeaf) {
     const errors: string[] = [];
     if (typeof obj.type !== "string" || !CONDITION_TYPES.has(obj.type)) {
-      errors.push(`${path}: type must be one of tag, url_contains, title_contains`);
+      errors.push(`${path}: type must be one of tag, url_contains, title_contains, provider`);
     }
     if (typeof obj.value !== "string" || !obj.value.trim()) {
       errors.push(`${path}: value must be a non-empty string`);

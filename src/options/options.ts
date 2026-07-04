@@ -221,7 +221,7 @@ function renderFoldersPanel(): HTMLElement {
   section.appendChild(sectionHeading("Folders"));
   section.appendChild(
     hint(
-      "Folders are defined as rules that match bookmarks by tag, URL, or title. " +
+      "Folders are defined as rules that match bookmarks by tag, URL, title, or provider. " +
       "Conditions can be nested into ALL / ANY / NONE groups, e.g. A AND (B OR C)."
     )
   );
@@ -830,6 +830,7 @@ function renderConditionEditor(condition: RuleCondition, onRemove: () => void): 
     { value: "tag", label: "Tag" },
     { value: "url_contains", label: "URL contains" },
     { value: "title_contains", label: "Title contains" },
+    { value: "provider", label: "Provider" },
   ];
   conditionTypes.forEach(({ value, label }) => {
     const opt = document.createElement("option");
@@ -839,9 +840,34 @@ function renderConditionEditor(condition: RuleCondition, onRemove: () => void): 
     typeSelect.appendChild(opt);
   });
   typeSelect.addEventListener("change", () => {
+    const previous = condition.type;
     condition.type = typeSelect.value as RuleCondition["type"];
+    // A provider id makes no sense as tag/URL/title text (and vice versa), so
+    // reset the value when crossing that boundary; re-render swaps the control.
+    if (condition.type === "provider") {
+      condition.value = providers[0]?.id ?? "";
+    } else if (previous === "provider") {
+      condition.value = "";
+    }
+    renderTabs();
   });
 
+  const valueControl =
+    condition.type === "provider"
+      ? renderProviderValueSelect(condition)
+      : renderConditionValueInput(condition);
+
+  const removeBtn = document.createElement("button");
+  removeBtn.textContent = "×";
+  removeBtn.addEventListener("click", onRemove);
+
+  div.appendChild(typeSelect);
+  div.appendChild(valueControl);
+  div.appendChild(removeBtn);
+  return div;
+}
+
+function renderConditionValueInput(condition: RuleCondition): HTMLElement {
   const valueInput = document.createElement("input");
   valueInput.type = "text";
   valueInput.value = condition.value;
@@ -849,15 +875,41 @@ function renderConditionEditor(condition: RuleCondition, onRemove: () => void): 
   valueInput.addEventListener("input", () => {
     condition.value = valueInput.value;
   });
+  return valueInput;
+}
 
-  const removeBtn = document.createElement("button");
-  removeBtn.textContent = "×";
-  removeBtn.addEventListener("click", onRemove);
+// Dropdown of configured providers; value is the provider config id (the
+// namespace prefix of bookmark ids). A value pointing at a removed provider is
+// kept as an explicit "unknown" entry instead of being silently rewritten.
+function renderProviderValueSelect(condition: RuleCondition): HTMLElement {
+  const select = document.createElement("select");
 
-  div.appendChild(typeSelect);
-  div.appendChild(valueInput);
-  div.appendChild(removeBtn);
-  return div;
+  // The browser preselects the first option; keep the data in sync so an
+  // untouched dropdown doesn't leave an empty value behind at Save time.
+  if (!condition.value && providers.length > 0) {
+    condition.value = providers[0].id;
+  }
+
+  if (condition.value && !providers.some((p) => p.id === condition.value)) {
+    const opt = document.createElement("option");
+    opt.value = condition.value;
+    opt.textContent = `Unknown provider (${condition.value})`;
+    opt.selected = true;
+    select.appendChild(opt);
+  }
+
+  providers.forEach((provider) => {
+    const opt = document.createElement("option");
+    opt.value = provider.id;
+    opt.textContent = providerTabLabel(provider);
+    if (condition.value === provider.id) opt.selected = true;
+    select.appendChild(opt);
+  });
+
+  select.addEventListener("change", () => {
+    condition.value = select.value;
+  });
+  return select;
 }
 
 // ---- Per-folder JSON editor ---------------------------------------------------

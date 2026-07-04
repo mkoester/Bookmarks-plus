@@ -185,6 +185,31 @@ test("matchesNode: deep nesting evaluates correctly", () => {
   assert.equal(matchesNode(bm("c", { tag_names: ["dev", "rust"], title: "Weekly digest" }), rules), true);
 });
 
+test("matchesNode: provider condition matches the bookmark id's namespace prefix", () => {
+  const rules: RuleGroup = {
+    match: "any",
+    conditions: [{ type: "provider", value: "linkding-1" }],
+  };
+  assert.equal(matchesNode(bm("linkding-1:42"), rules), true);
+  assert.equal(matchesNode(bm("browser:42"), rules), false);
+  // whole-namespace match only — no partial prefixes
+  assert.equal(matchesNode(bm("linkding-10:42"), rules), false);
+});
+
+test("matchesNode: provider combined with none picks untagged leftovers per source", () => {
+  // all bookmarks from one provider that no tag rule caught
+  const rules: RuleGroup = {
+    match: "all",
+    conditions: [
+      { type: "provider", value: "feed-1" },
+      { match: "none", conditions: [{ type: "tag", value: "dev" }] },
+    ],
+  };
+  assert.equal(matchesNode(bm("feed-1:1"), rules), true);
+  assert.equal(matchesNode(bm("feed-1:2", { tag_names: ["dev"] }), rules), false);
+  assert.equal(matchesNode(bm("linkding-1:1"), rules), false);
+});
+
 test("computeFolderMembership: old flat-format rules keep working (regression)", () => {
   // Shape exactly as persisted by pre-nesting versions.
   const map = bookmarksToMap([

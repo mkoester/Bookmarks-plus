@@ -2,12 +2,15 @@
 
 Working notes for publishing **Bookmarks+** to the Firefox Add-ons store (AMO) and
 the Chrome Web Store (CWS). Pairs with `CLAUDE.md` (architecture) and `PRIVACY.md`
-(privacy policy). Last worked: 2026-07-03.
+(privacy policy). Last worked: 2026-07-04.
 
 ## Current status
 
-- **Version:** 1.1.0 (single source of truth = `package.json`; injected into each
-  manifest at build). 1.1.0 = nested folder rules: rule groups nest arbitrarily
+- **Version:** 1.1.1 (single source of truth = `package.json`; injected into each
+  manifest at build). 1.1.1 = new `provider` folder-rule condition: match
+  bookmarks by their source provider (options editor shows a dropdown of
+  configured providers), so per-source folders work even when a source supplies
+  no tags. 1.1.0 = nested folder rules: rule groups nest arbitrarily
   (`A AND (B OR C)`), new "Match NONE (exclude)" mode, per-folder "Edit as JSON",
   export/import of all folder definitions as JSON (replace-all), options-page
   header (logo + version, upper right), two nested-rule demo folders in the

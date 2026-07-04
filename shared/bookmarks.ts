@@ -45,6 +45,9 @@ function matchesCondition(bookmark: Bookmark, condition: RuleCondition): boolean
       return bookmark.url.toLowerCase().includes(condition.value.toLowerCase());
     case "title_contains":
       return bookmark.title.toLowerCase().includes(condition.value.toLowerCase());
+    case "provider":
+      // value is a provider config id; bookmark ids are "${providerConfigId}:${rawId}"
+      return bookmark.id.startsWith(`${condition.value}:`);
     default:
       return false;
   }
