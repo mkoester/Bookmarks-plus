@@ -198,6 +198,103 @@ export function parseFolders(data: unknown): FoldersParseResult {
   return { valid: errors.length === 0, errors, folders };
 }
 
+// ---- JSON Feed (https://www.jsonfeed.org/version/1.1/) -------------------------
+
+export interface JsonFeedParseResult {
+  valid: boolean; // false only when the document is not a JSON Feed at all
+  errors: string[]; // root problem, or notes about individually skipped items
+  bookmarks: Bookmark[];
+}
+
+const MAX_DERIVED_TITLE_LENGTH = 80;
+
+// Minimal entity decoding for titles derived from content_html — no DOMParser
+// here: this must run in the Chrome MV3 service worker (and in node for tests).
+const NAMED_ENTITIES: Record<string, string> = {
+  amp: "&", lt: "<", gt: ">", quot: '"', apos: "'", nbsp: " ",
+  rsquo: "’", lsquo: "‘", rdquo: "”", ldquo: "“",
+  hellip: "…", mdash: "—", ndash: "–",
+};
+
+function decodeEntities(text: string): string {
+  return text.replace(/&(#x?[0-9a-fA-F]+|[a-zA-Z]+);/g, (match, entity: string) => {
+    if (entity.startsWith("#x") || entity.startsWith("#X")) {
+      return String.fromCodePoint(parseInt(entity.slice(2), 16));
+    }
+    if (entity.startsWith("#")) {
+      return String.fromCodePoint(parseInt(entity.slice(1), 10));
+    }
+    return NAMED_ENTITIES[entity.toLowerCase()] ?? match;
+  });
+}
+
+function stripHtml(html: string): string {
+  return decodeEntities(html.replace(/<[^>]*>/g, " ")).replace(/\s+/g, " ").trim();
+}
+
+// Title fallback chain for items without a title (common on microblog feeds):
+// content_text, then stripped content_html, then the bookmarked URL itself.
+function jsonFeedItemTitle(item: Record<string, unknown>, url: string): string {
+  const explicit = typeof item.title === "string" ? item.title.trim() : "";
+  const derived =
+    explicit ||
+    (typeof item.content_text === "string" ? item.content_text.replace(/\s+/g, " ").trim() : "") ||
+    (typeof item.content_html === "string" ? stripHtml(item.content_html) : "");
+  if (!derived) return url;
+  return derived.length > MAX_DERIVED_TITLE_LENGTH
+    ? `${derived.slice(0, MAX_DERIVED_TITLE_LENGTH - 1).trimEnd()}…`
+    : derived;
+}
+
+// Maps a fetched JSON Feed document (version 1 and 1.1 are both in the wild and
+// compatible for our fields) to Bookmarks namespaced under providerId. Items
+// without a usable URL are skipped and noted in errors; the feed-level favicon,
+// when present and safe, applies to every item (the format has no per-item icon).
+export function parseJsonFeed(
+  data: unknown,
+  providerId: string,
+  preferExternalUrl: boolean
+): JsonFeedParseResult {
+  if (typeof data !== "object" || data === null || !Array.isArray((data as Record<string, unknown>).items)) {
+    return { valid: false, errors: ["not a JSON Feed: root must be an object with an items array"], bookmarks: [] };
+  }
+  const feed = data as Record<string, unknown>;
+  const favicon =
+    typeof feed.favicon === "string" && isAllowedFaviconUrl(feed.favicon) ? feed.favicon : null;
+
+  const errors: string[] = [];
+  const bookmarks: Bookmark[] = [];
+  (feed.items as unknown[]).forEach((entry, index) => {
+    if (typeof entry !== "object" || entry === null) {
+      errors.push(`items[${index}]: not an object, skipped`);
+      return;
+    }
+    const item = entry as Record<string, unknown>;
+    const external = typeof item.external_url === "string" ? item.external_url : "";
+    const own = typeof item.url === "string" ? item.url : "";
+    const url = (preferExternalUrl && external) || own || external;
+    if (!url || !isAllowedBookmarkUrl(url)) {
+      errors.push(`items[${index}]: no usable URL, skipped`);
+      return;
+    }
+    const rawId =
+      item.id !== undefined && item.id !== null && String(item.id).trim()
+        ? String(item.id)
+        : url;
+    bookmarks.push({
+      id: `${providerId}:${rawId}`,
+      url,
+      title: jsonFeedItemTitle(item, url),
+      tag_names: Array.isArray(item.tags)
+        ? item.tags.filter((t): t is string => typeof t === "string" && t.trim() !== "")
+        : [],
+      ...(favicon ? { favicon_url: favicon } : {}),
+    });
+  });
+
+  return { valid: true, errors, bookmarks };
+}
+
 // Converts a validated raw entry to a Bookmark, namespaced under providerId.
 // Falls back to array index if id is absent.
 export function entryToBookmark(

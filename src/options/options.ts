@@ -4,6 +4,7 @@ import { applyStoredTheme, setTheme } from "@shared/theme";
 import type {
   BookmarkMap,
   Folder,
+  JsonFeedProviderConfig,
   LinkdingProviderConfig,
   JsonProviderConfig,
   MatchMode,
@@ -139,6 +140,7 @@ function renderOverviewPanel(): HTMLElement {
     ["json", "JSON (paste your own)"],
     ["browser", "Browser bookmarks"],
     ["linkding", "Linkding"],
+    ["jsonfeed", "JSON Feed (subscribe to a feed URL)"],
   ] as Array<[ProviderType, string]>)
     // static and browser are singletons — hide them from the menu once one exists
     .filter(([value]) => !(SINGLETON_PROVIDER_TYPES.has(value) && existingTypes.has(value)))
@@ -281,6 +283,14 @@ function providerTabLabel(provider: ProviderConfig): string {
   if (provider.type === "linkding" && provider.username) {
     return `linkding (${provider.username})`;
   }
+  // Feeds show their host — subscribing to several feeds is the normal case.
+  if (provider.type === "jsonfeed" && provider.url) {
+    try {
+      return `feed (${new URL(provider.url).hostname})`;
+    } catch {
+      // fall through to the generic label while the URL is still being typed
+    }
+  }
   // Otherwise only disambiguate with a 0-based index when more than one of the type exists.
   const sameType = providers.filter((p) => p.type === provider.type);
   if (sameType.length > 1) {
@@ -411,16 +421,17 @@ async function save(): Promise<void> {
 
   // Permission request must be the first await — user gesture activation expires after the first
   // async operation in Firefox. Bundle the bookmarks permission (browser provider) and the host
-  // permissions for each linkding origin into a single request so the gesture is only spent once.
+  // permissions for each remote provider origin (linkding, JSON feeds) into a single request so
+  // the gesture is only spent once.
   const hasBrowserProvider = settings.providers.some((p) => p.type === "browser");
-  const linkdingOriginPatterns = linkdingOrigins(settings.providers);
-  const needsPermissions = hasBrowserProvider || linkdingOriginPatterns.length > 0;
+  const remoteOriginPatterns = remoteProviderOrigins(settings.providers);
+  const needsPermissions = hasBrowserProvider || remoteOriginPatterns.length > 0;
 
   let permissionsGranted = !needsPermissions;
   if (needsPermissions) {
     permissionsGranted = await ext.permissions.request({
       ...(hasBrowserProvider ? { permissions: ["bookmarks"] } : {}),
-      ...(linkdingOriginPatterns.length > 0 ? { origins: linkdingOriginPatterns } : {}),
+      ...(remoteOriginPatterns.length > 0 ? { origins: remoteOriginPatterns } : {}),
     });
   }
 
@@ -497,15 +508,28 @@ async function revokeProviderPermissions(removed: ProviderConfig): Promise<void>
   if (removed.type === "browser" && !providers.some((p) => p.type === "browser")) {
     await ext.permissions.remove({ permissions: ["bookmarks"] });
   }
-  if (removed.type === "linkding" && removed.url) {
-    const origin = originPattern(removed.url);
+  const removedUrl = remoteProviderUrl(removed);
+  if (removedUrl) {
+    const origin = originPattern(removedUrl);
     const stillNeeded =
       origin !== null &&
-      providers.some((p) => p.type === "linkding" && p.url && originPattern(p.url) === origin);
+      providers.some((p) => {
+        const url = remoteProviderUrl(p);
+        return url !== null && originPattern(url) === origin;
+      });
     if (origin !== null && !stillNeeded) {
       await ext.permissions.remove({ origins: [origin] });
     }
   }
+}
+
+// The user-configured URL of a provider that fetches from a remote origin (and
+// therefore needs a host permission), or null for local/pasted providers.
+function remoteProviderUrl(provider: ProviderConfig): string | null {
+  if ((provider.type === "linkding" || provider.type === "jsonfeed") && provider.url) {
+    return provider.url;
+  }
+  return null;
 }
 
 function originPattern(url: string): string | null {
@@ -522,6 +546,9 @@ function renderProviderConfig(provider: ProviderConfig, index: number): HTMLElem
   }
   if (provider.type === "json") {
     return renderJsonConfig(provider, index);
+  }
+  if (provider.type === "jsonfeed") {
+    return renderJsonFeedConfig(provider, index);
   }
   if (provider.type === "browser") {
     const note = document.createElement("p");
@@ -626,6 +653,49 @@ function renderJsonConfig(provider: JsonProviderConfig, index: number): HTMLElem
   return div;
 }
 
+function renderJsonFeedConfig(provider: JsonFeedProviderConfig, index: number): HTMLElement {
+  const div = document.createElement("div");
+  div.className = "provider-config";
+
+  const note = document.createElement("p");
+  note.className = "provider-note";
+  note.textContent =
+    "Subscribes to a JSON Feed (jsonfeed.org) and shows its current items as bookmarks. " +
+    "Each sync mirrors the feed, so items that drop out of it disappear here too. Feed tags " +
+    "become bookmark tags, but many feeds set none — a folder rule matching this provider " +
+    "collects its items regardless.";
+  div.appendChild(note);
+
+  const urlLabel = document.createElement("label");
+  urlLabel.textContent = "Feed URL";
+  const urlInput = document.createElement("input");
+  urlInput.type = "url";
+  urlInput.value = provider.url;
+  urlInput.placeholder = "https://example.com/feed.json";
+  urlInput.addEventListener("input", () => {
+    (providers[index] as JsonFeedProviderConfig).url = urlInput.value.trim();
+  });
+  urlLabel.appendChild(urlInput);
+  div.appendChild(urlLabel);
+
+  const externalLabel = document.createElement("label");
+  externalLabel.className = "checkbox";
+  const externalInput = document.createElement("input");
+  externalInput.type = "checkbox";
+  externalInput.checked = provider.preferExternalUrl;
+  externalInput.addEventListener("change", () => {
+    (providers[index] as JsonFeedProviderConfig).preferExternalUrl = externalInput.checked;
+  });
+  externalLabel.appendChild(externalInput);
+  externalLabel.append(
+    "Prefer the linked page over the feed's own post (linkblogs like Daring Fireball " +
+    "publish commentary posts that point at an external article)"
+  );
+  div.appendChild(externalLabel);
+
+  return div;
+}
+
 function addProvider(type: ProviderType): void {
   if (SINGLETON_PROVIDER_TYPES.has(type) && providers.some((p) => p.type === type)) return;
 
@@ -637,6 +707,7 @@ function addProvider(type: ProviderType): void {
     case "json":    config = { ...base, type: "json", data: "" }; break;
     case "browser": config = { ...base, type: "browser" }; break;
     case "linkding": config = { ...base, type: "linkding", url: "", token: "" }; break;
+    case "jsonfeed": config = { ...base, type: "jsonfeed", url: "", preferExternalUrl: true }; break;
   }
 
   providers.push(config);
@@ -1112,15 +1183,16 @@ function isSpecificHost(origin: string): boolean {
   return origin !== "<all_urls>" && !origin.includes("://*");
 }
 
-// Origin match patterns ("https://host/*") for each configured linkding provider, so we can
+// Origin match patterns ("https://host/*") for each configured remote provider, so we can
 // request host access for exactly those hosts (a subset of the manifest's <all_urls>) instead
 // of making the user enable all-sites access by hand. Invalid/blank URLs are skipped.
-function linkdingOrigins(providerList: ProviderConfig[]): string[] {
+function remoteProviderOrigins(providerList: ProviderConfig[]): string[] {
   const origins = new Set<string>();
   for (const provider of providerList) {
-    if (provider.type === "linkding" && provider.url) {
+    const url = remoteProviderUrl(provider);
+    if (url) {
       try {
-        origins.add(`${new URL(provider.url).origin}/*`);
+        origins.add(`${new URL(url).origin}/*`);
       } catch {
         // ignore invalid URL; user is still editing
       }

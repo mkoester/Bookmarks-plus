@@ -6,8 +6,12 @@ the Chrome Web Store (CWS). Pairs with `CLAUDE.md` (architecture) and `PRIVACY.m
 
 ## Current status
 
-- **Version:** 1.1.1 (single source of truth = `package.json`; injected into each
-  manifest at build). 1.1.1 = new `provider` folder-rule condition: match
+- **Version:** 1.1.2 (single source of truth = `package.json`; injected into each
+  manifest at build). 1.1.2 = JSON Feed provider: subscribe to a feed URL, its
+  current items show as bookmarks (mirrors the feed each sync); linkblog
+  `external_url` preference (checkbox, default on), title fallback for untitled
+  microblog posts, feed favicon, host permission requested on Save like
+  Linkding. 1.1.1 = new `provider` folder-rule condition: match
   bookmarks by their source provider (options editor shows a dropdown of
   configured providers), so per-source folders work even when a source supplies
   no tags. 1.1.0 = nested folder rules: rule groups nest arbitrarily

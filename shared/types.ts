@@ -44,7 +44,7 @@ export interface Folder {
 
 // ---- Provider configs -------------------------------------------------------
 
-export type ProviderType = "static" | "json" | "browser" | "linkding";
+export type ProviderType = "static" | "json" | "browser" | "linkding" | "jsonfeed";
 
 interface BaseProviderConfig {
   id: string;
@@ -72,11 +72,20 @@ export interface LinkdingProviderConfig extends BaseProviderConfig {
   username?: string; // display label only; not sent to the linkding API (token auth)
 }
 
+export interface JsonFeedProviderConfig extends BaseProviderConfig {
+  type: "jsonfeed";
+  url: string;
+  // Linkblog feeds (e.g. Daring Fireball) set external_url to the linked page
+  // and url to their own commentary permalink; this picks which one to bookmark.
+  preferExternalUrl: boolean;
+}
+
 export type ProviderConfig =
   | StaticProviderConfig
   | JsonProviderConfig
   | BrowserProviderConfig
-  | LinkdingProviderConfig;
+  | LinkdingProviderConfig
+  | JsonFeedProviderConfig;
 
 // ---- Provider interface -----------------------------------------------------
 

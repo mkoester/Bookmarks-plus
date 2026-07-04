@@ -34,15 +34,16 @@
 
 **Provider system**
 - Each bookmark source is a `BookmarkProvider` (interface in `shared/types.ts`): `sync(): Promise<Bookmark[]>`
-- Provider configs (stored in `Settings.providers`) are a discriminated union on `type`: `"static" | "json" | "browser" | "linkding"`
+- Provider configs (stored in `Settings.providers`) are a discriminated union on `type`: `"static" | "json" | "browser" | "linkding" | "jsonfeed"`
 - Factory: `createProvider(config)` in `shared/providers/index.ts`
 - Every sync is a full sync (no incremental) — TODO: add per-provider incremental support
 
-**Four providers**
+**Five providers**
 1. **Static** (`shared/providers/static.ts`) — returns `STATIC_BOOKMARKS` from `shared/data/static.ts`; for development
 2. **JSON** (`shared/providers/json.ts`) — user pastes a JSON array; format: `{ id?, url, title, tag_names?, favicon_url? }[]`; validated by `shared/validation.ts`
 3. **Browser** (`shared/providers/browser.ts`) — uses `ext.bookmarks.getTree()`; ancestor folder names become `tag_names`; requests `bookmarks` optional permission at first sync
 4. **Linkding** (`shared/providers/linkding.ts`) — full paginated sync against the Linkding REST API
+5. **JSON Feed** (`shared/providers/jsonfeed.ts`) — fetches a [JSON Feed](https://www.jsonfeed.org/version/1.1/) URL; the feed's *current items* become bookmarks (full sync mirrors the feed, so items age out naturally). Mapping lives in `parseJsonFeed` (`shared/validation.ts`, pure/unit-tested): accepts version 1 and 1.1; `preferExternalUrl` (config, default true) picks `external_url` over `url` for linkblogs; title falls back to `content_text` → stripped `content_html` (regex — **no DOMParser in the Chrome MV3 service worker**) → URL, truncated at 80 chars; feed-level `favicon` applies to all items; items without a safe URL are skipped (debug-logged). Host permission for the feed origin is requested on Save via the same mechanism as Linkding (`remoteProviderUrl`/`remoteProviderOrigins` in options.ts). Deliberately JSON Feed only, not RSS/Atom — XML parsing needs an offscreen document on Chrome MV3; revisit if actually wanted.
 
 **Storage layout** (`chrome.storage.local` / `browser.storage.local`)
 - Bookmarks stored as `BookmarkMap` — flat `Record<string, Bookmark>` keyed by namespaced ID
@@ -119,14 +120,16 @@ shared/
   folderList.ts       — shared folder/bookmark DOM rendering for popup/sidebar/newtab
                         (renderFolderDetails/renderBookmarkItem; open behaviour injected via callbacks)
   validation.ts       — validateBookmarks() + entryToBookmark() for the JSON provider;
-                        parseRuleGroup()/parseFolders() for folder rules (JSON editor,
-                        import, defensive getFolders)
+                        parseJsonFeed() for the JSON Feed provider (item→Bookmark mapping,
+                        title fallback, entity decoding); parseRuleGroup()/parseFolders()
+                        for folder rules (JSON editor, import, defensive getFolders)
   providers/
     index.ts          — createProvider(config) factory
     static.ts         — StaticProvider
     json.ts           — JsonProvider
     browser.ts        — BrowserProvider (chrome.bookmarks, requests permission lazily)
     linkding.ts       — LinkdingProvider (paginated Linkding REST API)
+    jsonfeed.ts       — JsonFeedProvider (fetches a JSON Feed URL; mapping in validation.ts)
   data/
     static.ts         — STATIC_BOOKMARKS (17 items) + STATIC_FOLDERS (Crowdsourcing, Fediverse,
                         plus two nested-rule showcases: "Community (not social media nor

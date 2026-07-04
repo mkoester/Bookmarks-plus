@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   validateBookmarks,
   entryToBookmark,
+  parseJsonFeed,
   parseRuleGroup,
   parseFolders,
 } from "../shared/validation";
@@ -219,4 +220,102 @@ test("parseFolders keeps sane bookmark_ids and resets garbage to []", () => {
   assert.deepEqual(result.folders[0].bookmark_ids, ["p:1", "p:2"]);
   assert.deepEqual(result.folders[1].bookmark_ids, []);
   assert.deepEqual(result.folders[2].bookmark_ids, []);
+});
+
+// ---- parseJsonFeed -------------------------------------------------------------
+
+test("parseJsonFeed maps items to namespaced bookmarks with tags", () => {
+  const feed = {
+    version: "https://jsonfeed.org/version/1.1",
+    title: "A Feed",
+    items: [
+      {
+        id: "https://blog.example/post-1",
+        url: "https://blog.example/post-1",
+        title: "Post one",
+        tags: ["dev", "", 42, "news"],
+      },
+    ],
+  };
+  const result = parseJsonFeed(feed, "feed-1", true);
+  assert.equal(result.valid, true);
+  assert.deepEqual(result.errors, []);
+  assert.deepEqual(result.bookmarks, [
+    {
+      id: "feed-1:https://blog.example/post-1",
+      url: "https://blog.example/post-1",
+      title: "Post one",
+      tag_names: ["dev", "news"], // non-strings and empties dropped
+    },
+  ]);
+});
+
+test("parseJsonFeed: external_url preference (linkblog pattern)", () => {
+  const items = [
+    {
+      id: "1",
+      url: "https://linkblog.example/linked/1",
+      external_url: "https://article.example/story",
+      title: "Linked",
+    },
+    { id: "2", url: "https://linkblog.example/own-post", title: "Own" },
+  ];
+  const prefer = parseJsonFeed({ items }, "p", true);
+  assert.equal(prefer.bookmarks[0].url, "https://article.example/story");
+  assert.equal(prefer.bookmarks[1].url, "https://linkblog.example/own-post"); // no external_url → own
+  const own = parseJsonFeed({ items }, "p", false);
+  assert.equal(own.bookmarks[0].url, "https://linkblog.example/linked/1");
+});
+
+test("parseJsonFeed: title fallback chain for untitled items", () => {
+  const items = [
+    { id: "1", url: "https://a.example/1", content_text: "  plain   text post  " },
+    { id: "2", url: "https://a.example/2", content_html: "<p>American flag&rsquo;s <b>28</b> stars</p>" },
+    { id: "3", url: "https://a.example/3" },
+    { id: "4", url: "https://a.example/4", content_text: "x".repeat(100) },
+  ];
+  const result = parseJsonFeed({ items }, "p", true);
+  assert.equal(result.bookmarks[0].title, "plain text post");
+  assert.equal(result.bookmarks[1].title, "American flag’s 28 stars");
+  assert.equal(result.bookmarks[2].title, "https://a.example/3");
+  assert.equal(result.bookmarks[3].title, `${"x".repeat(79)}…`);
+});
+
+test("parseJsonFeed skips unusable items but keeps the rest", () => {
+  const items = [
+    { id: "1", title: "no url at all" },
+    { id: "2", url: "javascript:alert(1)", title: "bad scheme" },
+    "not an object",
+    { id: "4", url: "https://ok.example/", title: "fine" },
+  ];
+  const result = parseJsonFeed({ items }, "p", true);
+  assert.equal(result.valid, true);
+  assert.equal(result.errors.length, 3);
+  assert.deepEqual(result.bookmarks.map((b) => b.id), ["p:4"]);
+});
+
+test("parseJsonFeed: missing id falls back to the URL; feed favicon applies to items", () => {
+  const feed = {
+    favicon: "https://blog.example/favicon.png",
+    items: [{ url: "https://blog.example/post", title: "Post" }],
+  };
+  const result = parseJsonFeed(feed, "p", true);
+  assert.equal(result.bookmarks[0].id, "p:https://blog.example/post");
+  assert.equal(result.bookmarks[0].favicon_url, "https://blog.example/favicon.png");
+  // unsafe favicon is ignored
+  const unsafe = parseJsonFeed(
+    { favicon: "javascript:x", items: [{ url: "https://blog.example/post" }] },
+    "p",
+    true
+  );
+  assert.equal("favicon_url" in unsafe.bookmarks[0], false);
+});
+
+test("parseJsonFeed rejects documents without an items array", () => {
+  for (const bad of [null, "x", 42, [], {}, { items: "nope" }]) {
+    const result = parseJsonFeed(bad, "p", true);
+    assert.equal(result.valid, false);
+    assert.match(result.errors[0], /not a JSON Feed/);
+    assert.deepEqual(result.bookmarks, []);
+  }
 });
