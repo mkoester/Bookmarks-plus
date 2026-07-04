@@ -107,6 +107,16 @@ export default (env: { target?: string; browser?: string; mode?: string }): Conf
     // requirement). We keep production mode's tree-shaking + no source maps, but
     // ship readable JS. https://extensionworkshop.com/documentation/publish/source-code-submission/
     optimization: { minimize: false },
+    // Webpack's default 244 KiB asset-size warning targets network-loaded web
+    // pages; extension bundles load from local disk, so size is near-irrelevant.
+    // background.js is ~250 KiB because fast-xml-parser ships as unminified
+    // readable source (see above — no minify means no dead-code elimination).
+    // Keep a tripwire at a higher threshold to still catch an accidentally
+    // bundled fat dependency.
+    performance: {
+      maxAssetSize: 512 * 1024,
+      maxEntrypointSize: 512 * 1024,
+    },
     output: {
       path: outDir,
       filename: "[name].js",

@@ -34,8 +34,10 @@ the Chrome Web Store (CWS). Pairs with `CLAUDE.md` (architecture) and `PRIVACY.m
   collapsed boolean-logic help (`<details>`) on the Folders tab. Old flat
   rules load unchanged (no migration). 1.0.2 was pre-submission cleanup: shared
   folder-rendering helper (`shared/folderList.ts`), unit tests wired into
-  `pnpm build`, doc fixes. 1.0.1 is live on AMO:
-  https://addons.mozilla.org/en-US/firefox/addon/bookmarks-plus/
+  `pnpm build`, doc fixes. **1.1.0 is the last published version** (AMO:
+  https://addons.mozilla.org/en-US/firefox/addon/bookmarks-plus/); the 1.1.3
+  upload therefore ships everything from 1.1.1–1.1.3 — see "Version notes for
+  the 1.1.3 upload" below.
 - **Code state:** release-ready pending a manual re-test in both browsers (the
   render code was refactored). `pnpm build` (type-check + tests + 3 targets)
   clean. AMO `web-ext lint`: **0 errors, 3 benign warnings** (see below).
@@ -116,57 +118,82 @@ Three upload artifacts → **three listings across two stores**:
 - [ ] $5 one-time developer registration (if not already).
 - [ ] Paste the reviewer note (below).
 
+## Version notes for the 1.1.3 upload (everything since published 1.1.0)
+
+Paste into AMO "Release notes" (and reuse for any CWS listing description
+update — CWS has no changelog field):
+
+> **New bookmark source: Web feeds.** Subscribe to any RSS (2.0 or 1.0), Atom,
+> or JSON Feed URL — the format is detected automatically. The feed's current
+> items appear as bookmarks and the list mirrors the feed on every sync; feed
+> categories become tags.
+>
+> - **New folder rule condition: Provider** — collect everything from one
+>   source into a folder (picked from a dropdown of your configured sources),
+>   even when it has no tags.
+> - **"Latest" folder limit** — show only the newest N matching items. Every
+>   source now syncs per-item dates to make this work.
+> - **Per-feed "maximum items" cap** for feeds that ship a lot of entries.
+> - **Linkblog-friendly**: JSON Feeds that point posts at an external article
+>   (e.g. Daring Fireball) can bookmark the linked page instead of the post.
+> - Provider pages in the options now show how many links are synced and
+>   explain that feed items are a live list, not stored bookmarks.
+> - Feeds in legacy encodings (e.g. ISO-8859-1) decode correctly.
+
 ## Store listing copy
 
 ### Description — Bookmarks+ (Firefox / AMO)
 
 > **Bookmarks+ turns your bookmarks into a fast, folder-based launcher — in your sidebar, your toolbar popup, and (optionally) your New Tab page.**
 >
-> Define folders with simple rules ("tag is *reading*", "URL contains *github*", title contains…) and Bookmarks+ fills them automatically. Combine rules with AND/OR; a bookmark can live in several folders at once.
+> Define folders with simple rules ("tag is *reading*", "URL contains *github*", "comes from *this source*", title contains…) and Bookmarks+ fills them automatically. Combine and nest rules with AND/OR/NOT; a bookmark can live in several folders at once. Optionally show only the latest N items per folder.
 >
 > **Sources you can mix and match:**
 > • **Linkding** — sync your self-hosted Linkding instance via its REST API (token auth)
+> • **Web feeds** — follow any RSS, Atom, or JSON Feed as a live folder of its current links (categories become tags)
 > • **Your browser's own bookmarks** — folder names become tags
 > • **JSON** — paste your own list
 > • **Demo data** — try it instantly, no setup
 >
 > Background sync keeps everything current on a timer you control. Middle-click a folder to open everything in it at once. Per-site favicons with clean letter-tile fallbacks.
 >
-> **Privacy:** your data stays in your browser. The only network requests are to the Linkding instance *you* configure — host access is requested for that one origin and nothing else.
+> **Privacy:** your data stays in your browser. The only network requests are to the Linkding instance and the feeds *you* configure — host access is requested per origin and nothing else.
 
 ### Description — Bookmarks+ (Chrome, standard build)
 
 > **Quick access to your bookmarks from a toolbar popup and a side panel — without touching your New Tab page.**
 >
-> Bookmarks+ organizes your bookmarks into folders defined by rules (by tag, URL, or title, combined with AND/OR). Open the popup from the toolbar, or press **Ctrl+Shift+S** for the side panel.
+> Bookmarks+ organizes your bookmarks into folders defined by rules (by tag, URL, title, or source, nested with AND/OR/NOT; optional "latest N" per folder). Open the popup from the toolbar, or press **Ctrl+Shift+S** for the side panel.
 >
-> **Sources:** Linkding (self-hosted, REST API token auth), your browser's own bookmarks (folder names become tags), pasted JSON, or built-in demo data — mix as many as you like. Background sync on a timer you set.
+> **Sources:** Linkding (self-hosted, REST API token auth), web feeds (RSS / Atom / JSON Feed as a live folder of a site's current links), your browser's own bookmarks (folder names become tags), pasted JSON, or built-in demo data — mix as many as you like. Background sync on a timer you set.
 >
 > Prefer your New Tab page replaced too? Install **"Bookmarks+ (new tab edition)"** instead.
 >
-> **Privacy:** everything stays local; the only requests go to the Linkding instance you configure, with host access scoped to that single origin.
+> **Privacy:** everything stays local; the only requests go to the Linkding instance and feeds you configure, with host access scoped to those origins.
 
 ### Description — Bookmarks+ (new tab edition) (Chrome)
 
 > **Your bookmarks as a launcher every time you open a new tab — plus a toolbar popup and a side panel.**
 >
-> Same Bookmarks+ as the standard build, but this edition also replaces your New Tab page with your folder-based launcher. Folders are defined by rules (tag / URL / title, AND/OR); a bookmark can appear in several.
+> Same Bookmarks+ as the standard build, but this edition also replaces your New Tab page with your folder-based launcher. Folders are defined by rules (tag / URL / title / source, nested AND/OR/NOT, optional "latest N"); a bookmark can appear in several.
 >
-> **Sources:** Linkding (self-hosted REST API, token auth), your browser's own bookmarks (folders → tags), pasted JSON, or demo data. Background sync on your schedule. Side panel on **Ctrl+Shift+S**.
+> **Sources:** Linkding (self-hosted REST API, token auth), web feeds (RSS / Atom / JSON Feed as a live folder), your browser's own bookmarks (folders → tags), pasted JSON, or demo data. Background sync on your schedule. Side panel on **Ctrl+Shift+S**.
 >
 > Want to keep Chrome's native New Tab? Install the standard **"Bookmarks+"** build instead.
 >
-> **Privacy:** your data never leaves the browser except to reach the Linkding instance you configure, with host access scoped to that one origin.
+> **Privacy:** your data never leaves the browser except to reach the Linkding instance and feeds you configure, with host access scoped to those origins.
 
 ## Reviewer note (paste into AMO / CWS "notes to reviewer")
 
 > **About the `<all_urls>` optional host permission**
 >
-> This is declared under `optional_host_permissions` — it is **not** granted at install. It is requested at runtime, **only when the user saves a Linkding provider**, and is narrowed to **exactly the origin the user typed** (e.g. `https://links.example.com/*`) via `permissions.request({ origins: [<that one host>] })`. See `src/options/options.ts` → `save()` and `linkdingOrigins()`.
+> This is declared under `optional_host_permissions` — it is **not** granted at install. It is requested at runtime, **only when the user saves a provider that fetches from a URL** (their self-hosted Linkding instance, or a web feed they subscribe to), and is narrowed to **exactly the origin the user typed** (e.g. `https://links.example.com/*`) via `permissions.request({ origins: [<that one host>] })`. See `src/options/options.ts` → `save()` and `remoteProviderOrigins()`.
 >
-> The manifest pattern has to be broad because the Linkding host is **user-supplied** and unknown at build time, and MV3 provides no way to declare a dynamic/user-defined host pattern. The effective grant is always a single concrete host. The extension has **no content scripts** and never reads page content; the host permission is used solely for the extension's own `fetch()` calls to the user's Linkding REST API (cross-origin CORS).
+> The manifest pattern has to be broad because these hosts are **user-supplied** and unknown at build time, and MV3 provides no way to declare a dynamic/user-defined host pattern. The effective grant is always a set of single concrete hosts. The extension has **no content scripts** and never reads page content; the host permission is used solely for the extension's own `fetch()` calls to the user's Linkding REST API and the user's configured feed URLs (cross-origin CORS).
 >
 > Users can review and revoke each granted host in the extension's options ("Permissions" tab) or the browser's add-on settings.
+>
+> **Bundled third-party code:** `fast-xml-parser` (MIT, from npm, unmodified) is included in the background bundle to parse RSS/Atom feeds — MV3 service workers have no `DOMParser`. The build is deliberately **not minified**, so the library ships as readable source inside `background.js`.
 >
 > **Also note:** the shared background bundle references `chrome.sidePanel.open` (a Chrome-only API), guarded by a runtime `if (chrome.sidePanel)` check so it never executes in Firefox. This is the source of the `UNSUPPORTED_API` lint warning.
 
