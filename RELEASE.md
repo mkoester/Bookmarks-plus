@@ -108,6 +108,11 @@ Three upload artifacts → **three listings across two stores**:
       stores (sidebar caption says "sidebar / side panel"). See "Firefox question"
       note: only real divergence is favicons (we use deterministic letter tiles, so
       it's a fair representation of both).
+- [ ] **After the uploads, on `develop` only:** bump the patch version in
+      `package.json` — `develop` then carries the next release's version, while
+      `main`'s version only changes when a release is merged into it;
+      intermediate builds stay identifiable via the git-decorated version
+      (no bump-per-test-build).
 
 ### AMO (Firefox)
 - [ ] Upload `bookmarks-plus-firefox-<v>.zip`.
