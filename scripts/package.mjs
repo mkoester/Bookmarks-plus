@@ -6,37 +6,16 @@ import { readFileSync, mkdirSync, rmSync, existsSync } from "node:fs";
 import path from "node:path";
 
 const root = path.resolve(path.dirname(new URL(import.meta.url).pathname), "..");
-const pkg = JSON.parse(readFileSync(path.join(root, "package.json"), "utf-8"));
 
-// Git-based artifact versioning (same rules as thunderbird_send_as's build.sh):
-// clean main → 1.0.2 · other branch → 1.0.2-<hash> · dirty tree → …-SNAPSHOT.
-// Decorates the zip FILENAME only — the manifest inside must keep the plain
-// version (Chrome Web Store allows only 1-4 dot-separated integers; AMO is
-// similarly strict).
-function decoratedVersion(base) {
-  const git = (...args) => execFileSync("git", args, { cwd: root, encoding: "utf-8" }).trim();
-  try {
-    git("rev-parse", "--git-dir");
-  } catch {
-    console.warn("Not in a git repository — using base version only");
-    return base;
-  }
-  const branch = git("rev-parse", "--abbrev-ref", "HEAD");
-  const commit = git("rev-parse", "--short", "HEAD");
-  let dirty = false;
-  try {
-    git("diff-index", "--quiet", "HEAD", "--");
-  } catch {
-    dirty = true;
-  }
-  let version = base;
-  if (branch !== "main") version += `-${commit}`;
-  if (dirty) version += "-SNAPSHOT";
-  console.log(`Git info: branch=${branch}, commit=${commit}, status=${dirty ? "dirty" : "clean"}`);
-  return version;
+// The git-decorated build version (clean main → 1.0.2 · other branch →
+// 1.0.2-<hash> · dirty tree → …-SNAPSHOT) is computed at build time by
+// webpack.config.ts and baked into each target's manifest: Chromium targets
+// carry it in `version_name`, Firefox in `version` itself. Read it back from
+// the built manifest so the zip filename always matches the zip's content.
+function buildVersion(dist) {
+  const manifest = JSON.parse(readFileSync(path.join(dist, "manifest.json"), "utf-8"));
+  return manifest.version_name ?? manifest.version;
 }
-
-const version = decoratedVersion(pkg.version);
 
 const TARGETS = ["firefox", "chrome", "chrome-newtab"];
 const outDir = path.join(root, "web-store");
@@ -48,6 +27,7 @@ for (const target of TARGETS) {
     console.error(`Missing ${dist} — run \`pnpm build\` first.`);
     process.exit(1);
   }
+  const version = buildVersion(dist);
   const zipPath = path.join(outDir, `bookmarks-plus-${target}-${version}.zip`);
   rmSync(zipPath, { force: true });
   // `zip` must run from inside dist/<target> so paths in the archive are relative

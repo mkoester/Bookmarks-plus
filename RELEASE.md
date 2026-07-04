@@ -52,6 +52,11 @@ pnpm package      # builds all 3 targets (production, NOT minified, no source ma
 pnpm screenshots  # regenerates web-store/screenshots/*.png (1280x800)
 ```
 
+**Build from a clean `main` checkout.** Off-main or dirty builds get a git-decorated
+version (`1.1.3-<hash>`, `…-SNAPSHOT`) baked into the zip filename *and* the manifest
+(Chromium: `version_name`; Firefox: `version` itself) — instantly recognizable as
+not-for-upload. Clean main produces the plain store-safe version everywhere.
+
 `web-store/` is gitignored — artifacts are regenerated, not committed.
 
 Three upload artifacts → **three listings across two stores**:

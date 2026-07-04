@@ -52,8 +52,11 @@ async function init(): Promise<void> {
   await loadGrantedOrigins();
 
   // Installed build's version, injected into the manifest from package.json at
-  // build time. Guarded: the screenshot harness's manifest mock has no version.
-  const version = ext.runtime.getManifest().version;
+  // build time. Non-release builds carry the git-decorated version in
+  // version_name (Chromium) or version itself (Firefox); prefer version_name so
+  // both show it. Guarded: the screenshot harness's manifest mock has no version.
+  const manifest = ext.runtime.getManifest() as { version?: string; version_name?: string };
+  const version = manifest.version_name ?? manifest.version;
   if (version) {
     document.getElementById("version")!.textContent = `v${version}`;
   }
