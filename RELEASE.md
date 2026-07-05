@@ -6,8 +6,24 @@ the Chrome Web Store (CWS). Pairs with `CLAUDE.md` (architecture) and `PRIVACY.m
 
 ## Current status
 
-- **Version:** 1.1.4 (single source of truth = `package.json`; injected into each
-  manifest at build). 1.1.4 = folder display ordering + reordering + open
+- **Version:** 1.1.5 (single source of truth = `package.json`; injected into each
+  manifest at build). 1.1.5 = sync rework + launcher affordances:
+  **per-provider sync scheduling** (optional interval override on Linkding /
+  feed / browser-bookmarks tabs; alarm follows the fastest interval),
+  **incremental sync** (Linkding via `modified_since` with a server-clock
+  cursor; feeds via HTTP conditional GET, 304 = skip download+parse) with a
+  **configurable full-sync ceiling** (`fullSyncIntervalHours`, default 24 —
+  partial updates can't see deletions/archiving, this bounds their staleness;
+  wall-clock so sleep/power-off time counts), a per-provider **"Sync now"**
+  button (Overview + provider tab; syncs last-saved settings), **"Last
+  synced"** shown per provider, **drag-to-reorder folders** (same pointer
+  mechanism as rule conditions), **New Tab open-in-background buttons**
+  (per bookmark + per folder open-all, with an optional "close the New Tab
+  page after open-all" setting, default keep open), removed providers'
+  bookmarks now pruned immediately, and a bug fix: **sync-interval changes now
+  take effect immediately** (the alarm was only created at install time).
+  **No new permissions, no new dependencies.**
+  1.1.4 = folder display ordering + reordering + open
   affordances: per-folder **Sort** (newest added / recently modified /
   alphabetical) and per-condition **Weight** on OR (ANY) rules with 2+
   conditions (weight ranks matches, primary; sort is the tiebreak);
@@ -47,18 +63,19 @@ the Chrome Web Store (CWS). Pairs with `CLAUDE.md` (architecture) and `PRIVACY.m
   collapsed boolean-logic help (`<details>`) on the Folders tab. Old flat
   rules load unchanged (no migration). 1.0.2 was pre-submission cleanup: shared
   folder-rendering helper (`shared/folderList.ts`), unit tests wired into
-  `pnpm build`, doc fixes. **1.1.3 is the last published version** (AMO:
-  https://addons.mozilla.org/en-US/firefox/addon/bookmarks-plus/ — Approved,
-  Listed Version 1.1.3, updated 2026-07-04); the 1.1.4 upload therefore ships
-  only the 1.1.4 changes above — see "Version notes for the 1.1.4 upload" below.
-- **Code state:** `pnpm build` (type-check + tests + 3 targets) clean; `pnpm
-  verify:ui` (headless UI regression check) green. Before upload: **re-run
-  `web-ext lint`** (was 0 errors / 3 benign warnings on 1.1.3 — reconfirm after
-  the 1.1.4 CSS/manifest changes), and **manually confirm the drag-reorder in a
-  real Firefox** (its pointer-drag can't be validated by the headless harness —
-  see the drag note in `CLAUDE.md`).
-- **NOT yet done:** git commit (user does this themselves), and the actual store
-  uploads.
+  `pnpm build`, doc fixes. **1.1.4 is the last published version** (AMO:
+  https://addons.mozilla.org/en-US/firefox/addon/bookmarks-plus/ — Approved
+  2026-07-05); the 1.1.5 upload therefore ships only the 1.1.5 changes above —
+  see "Version notes for the 1.1.5 upload" below.
+- **Code state:** `pnpm build` (type-check + 98 tests + 3 targets) clean; `pnpm
+  verify:ui` (headless UI regression, 4 surfaces) green; feed conditional GET
+  verified live (xkcd ETag → 304), linkding `modified_since` + pagination
+  verified against a local mock of the API. Before upload: **smoke-test the
+  incremental sync against the real linkding instance** (no credentials on the
+  dev workstation — load the build, sync twice, background console should show
+  `incremental` on the second), and re-run `web-ext lint` (0 errors expected).
+- **NOT yet done:** `git push` + `git push --tags`, and the actual store
+  uploads (both the user's).
 
 ## Build & package (recap — details in CLAUDE.md)
 
@@ -144,6 +161,25 @@ Three upload artifacts → **three listings across two stores**:
 - [ ] $5 one-time developer registration (if not already).
 - [ ] Paste the reviewer note (below).
 
+## Version notes for the 1.1.5 upload (everything since published 1.1.4)
+
+Paste into AMO "Release notes" (reuse for any CWS listing description update —
+CWS has no changelog field). No new permissions and no new dependencies, so the
+review surface is unchanged.
+
+> - **Faster, lighter sync**: Linkding syncs now only fetch what changed since
+>   the last sync; web feeds use standard HTTP caching (ETag) and skip the
+>   download entirely when nothing changed. A periodic full sync (default:
+>   every 24 hours, configurable per source) still catches deletions.
+> - **Per-source sync intervals** — give a busy feed its own faster (or slower)
+>   schedule, independent of the global interval.
+> - **"Sync now" button** on each source, plus a "last synced" timestamp.
+> - **Drag to reorder folders** — the launcher shows them in your order.
+> - **New Tab page**: open a single bookmark or a whole folder in background
+>   tabs with one click (as in the popup/sidebar); optionally close the New Tab
+>   page after opening a whole folder.
+> - Fixed: changes to the sync interval now apply immediately.
+
 ## Version notes for the 1.1.4 upload (everything since published 1.1.3)
 
 Paste into AMO "Release notes" (reuse for any CWS listing description update —
@@ -196,7 +232,7 @@ update — CWS has no changelog field):
 > • **JSON** — paste your own list
 > • **Demo data** — try it instantly, no setup
 >
-> Background sync keeps everything current on a timer you control. Open a whole folder in background tabs with one button (or middle-click), or open a single bookmark in the background. Per-site favicons with clean letter-tile fallbacks.
+> Background sync keeps everything current on a timer you control — per-source intervals, incremental where the source supports it, and a "Sync now" button. Open a whole folder in background tabs with one button (or middle-click), or open a single bookmark in the background. Per-site favicons with clean letter-tile fallbacks.
 >
 > **Privacy:** your data stays in your browser. The only network requests are to the Linkding instance and the feeds *you* configure — host access is requested per origin and nothing else.
 
@@ -206,7 +242,7 @@ update — CWS has no changelog field):
 >
 > Bookmarks+ organizes your bookmarks into folders defined by rules (by tag, URL, title, or source, nested with AND/OR/NOT; optional "latest N" per folder, sortable by date or name). Open the popup from the toolbar, or press **Ctrl+Shift+S** for the side panel. Open a whole folder in background tabs with one button.
 >
-> **Sources:** Linkding (self-hosted, REST API token auth), web feeds (RSS / Atom / JSON Feed as a live folder of a site's current links), your browser's own bookmarks (folder names become tags), pasted JSON, or built-in demo data — mix as many as you like. Background sync on a timer you set.
+> **Sources:** Linkding (self-hosted, REST API token auth), web feeds (RSS / Atom / JSON Feed as a live folder of a site's current links), your browser's own bookmarks (folder names become tags), pasted JSON, or built-in demo data — mix as many as you like. Background sync on a timer you set, with per-source intervals and a "Sync now" button.
 >
 > Prefer your New Tab page replaced too? Install **"Bookmarks+ (new tab edition)"** instead.
 >
@@ -218,7 +254,7 @@ update — CWS has no changelog field):
 >
 > Same Bookmarks+ as the standard build, but this edition also replaces your New Tab page with your folder-based launcher. Folders are defined by rules (tag / URL / title / source, nested AND/OR/NOT, optional "latest N"); a bookmark can appear in several.
 >
-> **Sources:** Linkding (self-hosted REST API, token auth), web feeds (RSS / Atom / JSON Feed as a live folder), your browser's own bookmarks (folders → tags), pasted JSON, or demo data. Background sync on your schedule. Side panel on **Ctrl+Shift+S**.
+> **Sources:** Linkding (self-hosted REST API, token auth), web feeds (RSS / Atom / JSON Feed as a live folder), your browser's own bookmarks (folders → tags), pasted JSON, or demo data. Background sync on your schedule — per-source intervals, "Sync now" button. Side panel on **Ctrl+Shift+S**.
 >
 > Want to keep Chrome's native New Tab? Install the standard **"Bookmarks+"** build instead.
 >
@@ -245,6 +281,7 @@ update — CWS has no changelog field):
       API flatters Firefox). Currently letter tiles → fair for both.
 - [ ] Optional Firefox-captioned screenshot variant (currently shared "sidebar /
       side panel" wording).
-- [ ] From CLAUDE.md backlog: deletion handling when a provider is removed; live
-      JSON validation feedback in options; per-provider incremental sync;
-      optional_host_permission requested without `<all_urls>` if MV3 ever allows.
+- [ ] From CLAUDE.md backlog: live JSON validation feedback in options;
+      optional_host_permission requested without `<all_urls>` if MV3 ever
+      allows. (~~Deletion handling when a provider is removed~~ and
+      ~~per-provider incremental sync~~ shipped in 1.1.5.)
