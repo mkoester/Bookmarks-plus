@@ -81,6 +81,8 @@ export interface JsonProviderConfig extends BaseProviderConfig {
 
 export interface BrowserProviderConfig extends BaseProviderConfig {
   type: "browser";
+  // Optional override of Settings.syncIntervalMinutes for this provider only.
+  syncIntervalMinutes?: number;
 }
 
 export interface LinkdingProviderConfig extends BaseProviderConfig {
@@ -88,6 +90,8 @@ export interface LinkdingProviderConfig extends BaseProviderConfig {
   url: string;
   token: string;
   username?: string; // display label only; not sent to the linkding API (token auth)
+  // Optional override of Settings.syncIntervalMinutes for this provider only.
+  syncIntervalMinutes?: number;
 }
 
 export interface FeedProviderConfig extends BaseProviderConfig {
@@ -103,6 +107,8 @@ export interface FeedProviderConfig extends BaseProviderConfig {
   // Keep only the newest N feed items at sync time (some feeds ship 150+).
   // Absent = keep all.
   maxItems?: number;
+  // Optional override of Settings.syncIntervalMinutes for this provider only.
+  syncIntervalMinutes?: number;
 }
 
 export type ProviderConfig =
@@ -114,9 +120,55 @@ export type ProviderConfig =
 
 // ---- Provider interface -----------------------------------------------------
 
-export interface BookmarkProvider {
-  sync(): Promise<Bookmark[]>;
+// What the background loop knows from the provider's previous successful sync;
+// lets a provider fetch only what changed instead of the full corpus.
+export interface SyncContext {
+  // True when the loop requires a full sync (first sync, config changed, or the
+  // periodic deletion-reconciliation full sync is due) — ignore the fields below.
+  full: boolean;
+  // linkding: highest date_modified seen so far (server-side clock, so client
+  // clock skew can't lose updates) — becomes the modified_since query.
+  since?: string;
+  // Feeds: HTTP validators from the last 200 response, sent as
+  // If-None-Match / If-Modified-Since for a conditional GET.
+  etag?: string;
+  lastModified?: string;
 }
+
+export interface SyncResult {
+  // full: `bookmarks` is the provider's complete current corpus (replaces the
+  //   provider's slice of the stored map).
+  // incremental: `bookmarks` holds only new/changed items (upserted into the
+  //   slice) — deletions are invisible until the next full sync.
+  // unchanged: source not modified (feed 304); `bookmarks` is empty, keep slice.
+  kind: "full" | "incremental" | "unchanged";
+  bookmarks: Bookmark[];
+  // Fresh HTTP validators (feeds, from a 200 response) for the next sync.
+  etag?: string;
+  lastModified?: string;
+}
+
+export interface BookmarkProvider {
+  sync(ctx?: SyncContext): Promise<SyncResult>;
+}
+
+// ---- Per-provider sync state (storage key: providerSyncState) ---------------
+
+export interface ProviderSyncState {
+  lastSyncAt: string; // ISO — last successful sync of any kind ("" = never)
+  lastAttemptAt: string; // ISO — last attempt incl. failures (due-check basis)
+  lastFullSyncAt: string; // ISO — last successful FULL sync ("" = never)
+  // providerFingerprint() of the config that produced this state; a mismatch
+  // (URL/token/… changed) forces the next sync to be full.
+  fingerprint: string;
+  // linkding: highest date_modified seen (ISO; lexicographically comparable).
+  cursor?: string;
+  // Feeds: validators from the last 200 response.
+  etag?: string;
+  lastModified?: string;
+}
+
+export type ProviderSyncStateMap = Record<string, ProviderSyncState>;
 
 // ---- Storage schema ---------------------------------------------------------
 
@@ -126,6 +178,7 @@ export interface StorageSchema {
   lastSync: string | null;
   settings: Settings;
   syncStatus: SyncStatus;
+  providerSyncState: ProviderSyncStateMap;
 }
 
 // ---- Sync status ------------------------------------------------------------
@@ -133,6 +186,10 @@ export interface StorageSchema {
 export interface SyncError {
   name: string; // provider name that failed
   message: string; // human-readable reason
+  // Provider config id — since per-provider scheduling, a sync round only
+  // touches the providers that were due, so statuses are merged by this key
+  // (an error sticks until its provider is attempted again or removed).
+  providerId?: string;
 }
 
 export interface SyncStatus {

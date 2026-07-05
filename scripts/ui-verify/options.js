@@ -101,4 +101,19 @@ window.__verify.run(async ({ check, waitFor }) => {
   const namesAfter = folderNames().join(",");
   check("dropping folder0 at the end reorders the folders (" + namesAfter + ")", namesAfter === expected);
   check("folder marker cleared after drop", !document.querySelector(".folders-list .drop-marker"));
+
+  // --- Provider tab: per-provider sync interval override + last-synced ---
+  Array.from(document.querySelectorAll("#tab-bar button"))
+    .find((b) => b.textContent === "linkding (me)")
+    ?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+  const panel = document.getElementById("tab-panels");
+  const override = panel.querySelector("input.sync-interval-override");
+  check(
+    "linkding tab has a sync-interval override input (empty = global)",
+    !!override && override.value === "" && override.placeholder === "global"
+  );
+  check(
+    "provider tab shows the last-synced time",
+    Array.from(panel.querySelectorAll(".hint")).some((h) => h.textContent.startsWith("Last synced:"))
+  );
 });

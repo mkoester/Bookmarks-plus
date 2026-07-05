@@ -1,5 +1,12 @@
 import ext from "./browser";
-import type { BookmarkMap, Folder, Settings, StorageSchema, SyncStatus } from "./types";
+import type {
+  BookmarkMap,
+  Folder,
+  ProviderSyncStateMap,
+  Settings,
+  StorageSchema,
+  SyncStatus,
+} from "./types";
 import { DEFAULT_SETTINGS } from "./types";
 import { STATIC_FOLDERS } from "./data/static";
 import { parseFolders } from "./validation";
@@ -52,6 +59,15 @@ export async function saveBookmarksAndSync(
 ): Promise<void> {
   const update: Partial<StorageSchema> = { bookmarks, folders, lastSync };
   await ext.storage.local.set(update);
+}
+
+export async function getProviderSyncState(): Promise<ProviderSyncStateMap> {
+  const result = await ext.storage.local.get("providerSyncState");
+  return (result.providerSyncState as ProviderSyncStateMap) ?? {};
+}
+
+export async function saveProviderSyncState(state: ProviderSyncStateMap): Promise<void> {
+  await ext.storage.local.set({ providerSyncState: state });
 }
 
 export async function getSyncStatus(): Promise<SyncStatus | null> {

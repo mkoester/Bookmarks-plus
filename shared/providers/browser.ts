@@ -1,18 +1,18 @@
 import ext from "../browser";
 import { debugLog, debugWarn } from "../debug";
-import type { Bookmark, BookmarkProvider, BrowserProviderConfig } from "../types";
+import type { Bookmark, BookmarkProvider, BrowserProviderConfig, SyncResult } from "../types";
 
 export class BrowserProvider implements BookmarkProvider {
   constructor(private config: BrowserProviderConfig) {}
 
-  async sync(): Promise<Bookmark[]> {
+  async sync(): Promise<SyncResult> {
     debugLog(`[BrowserProvider "${this.config.name}"] sync started`);
 
     const granted = await ext.permissions.contains({ permissions: ["bookmarks"] });
     debugLog(`[BrowserProvider "${this.config.name}"] bookmarks permission granted: ${granted}`);
     if (!granted) {
       debugWarn(`[BrowserProvider "${this.config.name}"] permission not granted — request it from the options page`);
-      return [];
+      return { kind: "full", bookmarks: [] };
     }
 
     const tree = await ext.bookmarks.getTree();
@@ -22,7 +22,7 @@ export class BrowserProvider implements BookmarkProvider {
 
     debugLog(`[BrowserProvider "${this.config.name}"] imported ${bookmarks.length} bookmarks`);
 
-    return bookmarks;
+    return { kind: "full", bookmarks };
   }
 
   private walk(

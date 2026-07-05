@@ -1,14 +1,35 @@
 import ext from "@shared/browser";
 import {
+  getBookmarks,
   getFolders,
+  getProviderSyncState,
   getSettings,
+  getSyncStatus,
   saveBookmarksAndSync,
+  saveProviderSyncState,
   saveSyncStatus,
 } from "@shared/storage";
-import { bookmarksToMap, computeFolderMembership } from "@shared/bookmarks";
+import { computeFolderMembership } from "@shared/bookmarks";
+import {
+  alarmPeriodMinutes,
+  applySyncResult,
+  effectiveIntervalMinutes,
+  isDue,
+  maxModifiedCursor,
+  mergeSyncErrors,
+  needsFullSync,
+  providerFingerprint,
+  pruneBookmarks,
+} from "@shared/sync";
 import { createProvider } from "@shared/providers/index";
 import { debugLog } from "@shared/debug";
-import type { Message, SyncError } from "@shared/types";
+import type {
+  Message,
+  ProviderSyncState,
+  SyncContext,
+  SyncError,
+  SyncResult,
+} from "@shared/types";
 
 const SYNC_ALARM = "bookmarks-plus-sync";
 const MIN_SYNC_INTERVAL_MS = 60_000;
@@ -33,6 +54,15 @@ ext.runtime.onInstalled.addListener(async (details) => {
 ext.alarms.onAlarm.addListener((alarm) => {
   if (alarm.name === SYNC_ALARM) {
     sync();
+  }
+});
+
+// Keep the alarm period in step with the settings (global interval or a
+// per-provider override changed). Previously the alarm was only created in
+// onInstalled, so interval changes silently never took effect.
+ext.storage.onChanged.addListener((changes, area) => {
+  if (area === "local" && changes.settings) {
+    setupAlarm();
   }
 });
 
@@ -87,8 +117,10 @@ ext.runtime.onMessage.addListener(
 async function setupAlarm(): Promise<void> {
   const settings = await getSettings();
   await ext.alarms.clearAll();
+  // Tick as often as the most impatient provider (per-provider overrides can
+  // be shorter than the global interval); each tick only syncs providers due.
   ext.alarms.create(SYNC_ALARM, {
-    periodInMinutes: settings.syncIntervalMinutes,
+    periodInMinutes: alarmPeriodMinutes(settings),
   });
 }
 
@@ -111,32 +143,114 @@ async function sync(force = false): Promise<void> {
 
   try {
     const settings = await getSettings();
-    const allBookmarks = [];
+    const syncState = await getProviderSyncState();
+    let map = await getBookmarks();
     const errors: SyncError[] = [];
+    const attempted = new Set<string>();
+    let anyChange = false;
 
     for (const config of settings.providers) {
+      const interval = effectiveIntervalMinutes(config, settings.syncIntervalMinutes);
+      const state = syncState[config.id];
+      // force (user-initiated) bypasses the schedule, not the incremental path —
+      // fingerprint changes and the periodic full sync still decide `full`.
+      if (!force && !isDue(state, interval, now)) continue;
+      attempted.add(config.id);
+
+      const fingerprint = providerFingerprint(config);
+      const full = needsFullSync(state, fingerprint, now);
+      const ctx: SyncContext = {
+        full,
+        since: state?.cursor,
+        etag: state?.etag,
+        lastModified: state?.lastModified,
+      };
+      const attemptIso = new Date().toISOString();
+
       try {
         const provider = createProvider(config);
-        const bookmarks = await provider.sync();
-        allBookmarks.push(...bookmarks);
-        debugLog(`Provider "${config.name}": ${bookmarks.length} bookmarks`);
+        const result = await provider.sync(ctx);
+        map = applySyncResult(map, config.id, result);
+        if (result.kind !== "unchanged") anyChange = true;
+        syncState[config.id] = nextSyncState(state, fingerprint, attemptIso, result);
+        debugLog(`Provider "${config.name}": ${result.kind}, ${result.bookmarks.length} bookmarks`);
       } catch (err) {
         console.error(`Provider "${config.name}" sync failed:`, err);
-        errors.push({ name: config.name, message: describeError(err) });
+        errors.push({ name: config.name, message: describeError(err), providerId: config.id });
+        // Record the attempt so a failing provider retries at its own interval
+        // instead of on every alarm tick.
+        syncState[config.id] = state
+          ? { ...state, lastAttemptAt: attemptIso }
+          : { lastSyncAt: "", lastAttemptAt: attemptIso, lastFullSyncAt: "", fingerprint };
       }
     }
 
-    const map = bookmarksToMap(allBookmarks);
-    const folders = await getFolders();
-    const recomputed = computeFolderMembership(map, folders);
-    await saveBookmarksAndSync(map, recomputed, new Date().toISOString());
-    await saveSyncStatus({ at: new Date().toISOString(), errors });
-    debugLog(`Sync complete: ${allBookmarks.length} bookmarks total`);
+    // Reconcile removed providers: drop their bookmarks and sync state.
+    const activeIds = settings.providers.map((p) => p.id);
+    const pruned = pruneBookmarks(map, activeIds);
+    if (Object.keys(pruned).length !== Object.keys(map).length) anyChange = true;
+    map = pruned;
+    for (const id of Object.keys(syncState)) {
+      if (!activeIds.includes(id)) delete syncState[id];
+    }
+
+    if (!force && attempted.size === 0 && !anyChange) {
+      debugLog("Sync tick: no provider due, nothing to do");
+      return;
+    }
+
+    // force always recomputes folders — an options Save may have changed folder
+    // rules even when every provider reported "unchanged".
+    if (force || anyChange) {
+      const folders = await getFolders();
+      const recomputed = computeFolderMembership(map, folders);
+      await saveBookmarksAndSync(map, recomputed, new Date().toISOString());
+    }
+    await saveProviderSyncState(syncState);
+
+    const previous = await getSyncStatus();
+    const merged = mergeSyncErrors(previous?.errors ?? [], attempted, errors, activeIds);
+    await saveSyncStatus({ at: new Date().toISOString(), errors: merged });
+    debugLog(`Sync complete: ${attempted.size} providers attempted, ${Object.keys(map).length} bookmarks total`);
   } catch (error) {
     console.error("Sync failed:", error);
   } finally {
     syncing = false;
   }
+}
+
+// The provider's new sync state after a successful sync.
+function nextSyncState(
+  state: ProviderSyncState | undefined,
+  fingerprint: string,
+  attemptIso: string,
+  result: SyncResult
+): ProviderSyncState {
+  if (result.kind === "unchanged") {
+    // Keep cursor/validators; just record the successful check.
+    return {
+      lastSyncAt: attemptIso,
+      lastAttemptAt: attemptIso,
+      lastFullSyncAt: state?.lastFullSyncAt ?? "",
+      fingerprint,
+      ...(state?.cursor ? { cursor: state.cursor } : {}),
+      ...(state?.etag ? { etag: state.etag } : {}),
+      ...(state?.lastModified ? { lastModified: state.lastModified } : {}),
+    };
+  }
+  const full = result.kind === "full";
+  // Full: rebuild the cursor from the complete corpus (a stale one could skip
+  // updates if the source rolled back). Incremental: advance it.
+  const cursor = maxModifiedCursor(result.bookmarks, full ? undefined : state?.cursor);
+  return {
+    lastSyncAt: attemptIso,
+    lastAttemptAt: attemptIso,
+    lastFullSyncAt: full ? attemptIso : state?.lastFullSyncAt ?? "",
+    fingerprint,
+    ...(cursor ? { cursor } : {}),
+    ...(result.etag ? { etag: result.etag } : {}),
+    ...(result.lastModified ? { lastModified: result.lastModified } : {}),
+  };
 }
 
 // A short, user-facing reason for a provider failure. Linkding throws

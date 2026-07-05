@@ -61,7 +61,17 @@
     folder("f5", "Design", "design", [14, 15, 16]),
   ];
 
-  const STORE = { settings, folders, bookmarks, syncStatus: null, lastSync: new Date().toISOString() };
+  const now = new Date().toISOString();
+  const STORE = {
+    settings,
+    folders,
+    bookmarks,
+    syncStatus: null,
+    lastSync: now,
+    providerSyncState: {
+      ld: { lastSyncAt: now, lastAttemptAt: now, lastFullSyncAt: now, fingerprint: "demo" },
+    },
+  };
 
   const noop = () => {};
   const listener = { addListener: noop, removeListener: noop };

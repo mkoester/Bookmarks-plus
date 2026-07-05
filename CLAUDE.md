@@ -9,7 +9,7 @@
 - **Package manager: pnpm** (not npm — `package-lock.json` is gitignored)
 - `pnpm type-check` — `tsc --noEmit`, should be clean
 - `pnpm test` — unit tests in `tests/*.test.ts` via `node --test` with the `tsx` loader (no framework). They cover the pure `shared/` modules (`url`, `validation`, `bookmarks`, `reorder`) and must stay free of DOM/`ext` imports (`shared/browser.ts` throws outside an extension context).
-- `pnpm verify:ui` — headless UI regression check the unit tests can't reach (they need a real DOM + the built bundle). `scripts/verify-ui.mjs` copies `dist/chrome`, injects `screenshot-harness.js` (mock `chrome.*`) + `scripts/ui-verify/lib.js` + a per-surface driver (`scripts/ui-verify/{options,popup,sidebar,newtab}.js`), runs each page under **chromium --dump-dom**, and greps a `<pre id="verify-result">` of PASS/FAIL lines; exits non-zero on failure. Asserts: folders render, the open-all / open-in-background buttons exist, the pointer-based rule AND folder reorders actually reorder + show their `.drop-marker`, and the new-tab open-all honours `newTabCloseOnOpenAll` (the newtab driver spies on the harness's `chrome.tabs.create/remove` and flips the live settings object). Needs `chromium` on PATH; no npm install. **Caveat:** synthetic events validate handler logic + DOM (and drive the pointer-drag handlers genuinely end-to-end), but can't validate true *native* browser gestures — see the drag-reorder note under "Folder rules". Add a driver check whenever you add UI a unit test can't cover.
+- `pnpm verify:ui` — headless UI regression check the unit tests can't reach (they need a real DOM + the built bundle). `scripts/verify-ui.mjs` copies `dist/chrome`, injects `screenshot-harness.js` (mock `chrome.*`) + `scripts/ui-verify/lib.js` + a per-surface driver (`scripts/ui-verify/{options,popup,sidebar,newtab}.js`), runs each page under **chromium --dump-dom**, and greps a `<pre id="verify-result">` of PASS/FAIL lines; exits non-zero on failure. Asserts: folders render, the open-all / open-in-background buttons exist, the pointer-based rule AND folder reorders actually reorder + show their `.drop-marker`, the new-tab open-all honours `newTabCloseOnOpenAll` (the newtab driver spies on the harness's `chrome.tabs.create/remove` and flips the live settings object), and the provider tab shows the sync-interval override input + last-synced time. Needs `chromium` on PATH; no npm install. **Caveat:** synthetic events validate handler logic + DOM (and drive the pointer-drag handlers genuinely end-to-end), but can't validate true *native* browser gestures — see the drag-reorder note under "Folder rules". Add a driver check whenever you add UI a unit test can't cover.
 - `pnpm build` — runs **type-check + tests first**, then builds all three targets via webpack, **production mode** (tree-shaken, no source maps, **not minified** — `optimization.minimize: false`, because AMO advises against minification and it has no perf benefit for local extension code). `dev:*`/watch builds stay development with inline source maps. Mode is `--env mode=production` (see `isProd` in `webpack.config.ts`).
 - `pnpm package` — builds, then zips each `dist/<target>/` into `web-store/bookmarks-plus-<target>-<version>.zip` for store upload (needs the `zip` CLI). `web-store/` is gitignored. The `<version>` in the filename is read back from the built manifest (`version_name ?? version`), so it always matches the zip's content.
 - `pnpm screenshots` — generates repeatable 1280×800 store screenshots to `web-store/screenshots/`. `scripts/screenshots.mjs` copies `dist/chrome`, injects `scripts/screenshot-harness.js` (mocks `chrome.*` with demo data so the real page bundles render headless), captures each surface with system **chromium --headless**, and frames the small ones with **ImageMagick** (caption font resolved via `fc-match`). Edit the `DEMO` data in the harness or the `SHOTS` list to change content. Needs `chromium` + `magick` on PATH; no npm install.
@@ -51,7 +51,7 @@
 - Each bookmark source is a `BookmarkProvider` (interface in `shared/types.ts`): `sync(): Promise<Bookmark[]>`
 - Provider configs (stored in `Settings.providers`) are a discriminated union on `type`: `"static" | "json" | "browser" | "linkding" | "jsonfeed"`
 - Factory: `createProvider(config)` in `shared/providers/index.ts`
-- Every sync is a full sync (no incremental) — TODO: add per-provider incremental support
+- `BookmarkProvider.sync(ctx?: SyncContext): Promise<SyncResult>` (since 2026-07-05): the context carries what the loop remembers from the last successful sync (linkding cursor, feed HTTP validators, and a `full` flag that forbids using them); the result declares its `kind` — `full` (complete corpus, replaces the provider's map slice), `incremental` (new/changed only, upserted), `unchanged` (feed 304, slice kept). static/json/browser always return `full`.
 
 **Five providers**
 1. **Static** (`shared/providers/static.ts`) — returns `STATIC_BOOKMARKS` from `shared/data/static.ts`; for development
@@ -66,8 +66,8 @@
 **Storage layout** (`chrome.storage.local` / `browser.storage.local`)
 - Bookmarks stored as `BookmarkMap` — flat `Record<string, Bookmark>` keyed by namespaced ID
 - Folders stored as `Folder[]` — each has user-defined rules and a precomputed `bookmark_ids: string[]`
-- `bookmark_ids` recomputed in background worker after every sync, not at render time
-- `lastSync` stored as ISO string (currently informational only — all providers do full sync)
+- `bookmark_ids` recomputed in background worker after every sync that changed anything, not at render time
+- `lastSync` stored as ISO string (informational); per-provider bookkeeping in `providerSyncState` (see Sync flow)
 
 **Favicon strategy** (`shared/favicon.ts` — `renderFavicon(bookmark, size)`)
 - `favicon_url` is optional on `Bookmark` — only stored when a provider returns one; always preferred when present (Linkding supplies it server-resolved)
@@ -75,11 +75,17 @@
 - **Firefox**: no favicon API exists, so it falls back to guessing `${origin}/favicon.ico`.
 - **Last resort (both)**: an inline-SVG letter tile (site initial on a hue derived from the URL) when the icon fails to load. No more empty gaps.
 
-**Sync flow**
-- Background service worker owns all sync logic
-- Two triggers: `chrome.alarms` (configurable interval, default 15 min) and `sync_requested` message from any UI page
-- Debounced: won't sync more than once per minute
-- Full sync always: iterates all configured providers, merges results into a single `BookmarkMap`
+**Sync flow (per-provider scheduling + incremental, since 2026-07-05)**
+- Background service worker owns all sync logic; the pure scheduling/merge helpers live in `shared/sync.ts` (unit-tested, DOM/ext-free)
+- Two triggers: `chrome.alarms` and `sync_requested` message from any UI page. The alarm period is `alarmPeriodMinutes()` = min(global interval, all per-provider overrides); each tick only syncs providers that are **due** (`isDue`, based on `lastAttemptAt` so a failing provider retries at its own interval, not every tick). The alarm is re-created on every settings change via a `storage.onChanged` listener — previously it was only set in `onInstalled`, so interval edits silently never applied (old bug, fixed in this rework)
+- **Per-provider interval override**: `syncIntervalMinutes?` on linkding/feed/browser configs (sources that change independently of the extension; static/json only change via Save, which force-syncs anyway). UI: "Sync interval override" input on the provider's own tab; `effectiveIntervalMinutes()` falls back to the global setting
+- **Incremental syncs**: linkding sends `modified_since=<cursor>` where the cursor is the highest `date_modified` ever seen (server-side clock — client skew can't lose updates; `maxModifiedCursor`). Feeds send `If-None-Match`/`If-Modified-Since` (with `cache: "no-store"` so OUR validators reach the server, not the HTTP cache's) and treat a 304 as `kind: "unchanged"` — feeds have no standard delta protocol, a 200 body is always the full current list, so the win is skipping download+parse. **Verified live**: xkcd.com honours the ETag round-trip; the linkding query/pagination path was exercised against a local mock of the API (no credentials on this workstation)
+- **Deletions are invisible to `modified_since`** (linkding has no tombstone API; archiving just removes the bookmark from the list), so `needsFullSync()` forces a full sync per provider at least every `FULL_SYNC_MAX_AGE_MS` (24 h) — that's the staleness ceiling for deletes/archives — and whenever the config `providerFingerprint()` changed (URL/token/feed options edited; the json provider hashes its pasted data with FNV-1a instead of embedding it)
+- Bookkeeping lives in `storage.local.providerSyncState` (`ProviderSyncStateMap`, keyed by provider config id): `lastSyncAt`/`lastAttemptAt`/`lastFullSyncAt`, `fingerprint`, linkding `cursor`, feed `etag`/`lastModified`. The options provider tab shows `lastSyncAt` as "Last synced: …"
+- Merging is slice-based (`applySyncResult`): a provider only ever touches ids prefixed `${its config id}:`. After every round `pruneBookmarks` drops slices (and state entries) of removed providers — closes the old "removed provider's bookmarks linger" gap
+- `sync_requested` (`force`) bypasses the schedule but NOT the incremental logic, and always recomputes+saves folders (an options Save can change folder rules while every provider reports "unchanged"). A scheduled tick where nothing was due and nothing changed writes nothing at all
+- Sync statuses are partial now (only due providers run), so `syncStatus.errors` are **merged** (`mergeSyncErrors`, keyed by the new `SyncError.providerId`): an error sticks in the banner until its provider is retried or removed
+- Debounced: won't sync more than once per minute (`force` bypasses)
 
 **Folder rules** (nested groups since 2026-07-04)
 ```typescript
@@ -154,6 +160,11 @@ shared/
                         fast-xml-parser) + decodeFeedBytes() (XML-prolog encoding)
   reorder.ts          — insertionIndexForY() pure geometry helper for the
                         options page's pointer-based rule reordering (unit-tested)
+  sync.ts             — pure sync-loop helpers (unit-tested): per-provider
+                        scheduling (isDue/needsFullSync/effectiveIntervalMinutes/
+                        alarmPeriodMinutes), providerFingerprint, slice merge
+                        (applySyncResult/pruneBookmarks), maxModifiedCursor,
+                        mergeSyncErrors
   providers/
     index.ts          — createProvider(config) factory
     static.ts         — StaticProvider
@@ -220,9 +231,9 @@ Pagination: follows `next` links until exhausted (100 results per page).
 ## What's missing / next steps
 
 **Functional gaps**
-- [ ] Deletion handling — full sync replaces the whole map, so deletions from Linkding/browser are caught. But if a provider is removed, its bookmarks linger in storage until the next sync. TODO: filter map by active provider IDs after sync.
+- [x] ~~Deletion handling for removed providers~~ — `pruneBookmarks` drops inactive providers' slices after every sync round (2026-07-05)
 - [ ] Manual JSON import UI — `validateBookmarks()` exists in `validation.ts` and the options page has a JSON textarea, but there's no live validation feedback shown to the user
-- [ ] Per-provider incremental sync — Linkding supports `modified_since`; could speed up large collections
+- [x] ~~Per-provider incremental sync~~ — linkding `modified_since` + feed conditional GET, with a daily full sync reconciling deletions (see Sync flow, 2026-07-05)
 - [x] ~~Options page host permission for Linkding URLs~~ — requested on Save, scoped to the configured origin (see README "Linkding connection & permissions")
 - [x] ~~Real icons~~ — paperclip+"+" `icon.svg` created and rasterised (see Build & tooling)
 - [x] ~~CSS placeholder~~ — shared `:root` token set in `src/tokens.css`, light/dark/system themes

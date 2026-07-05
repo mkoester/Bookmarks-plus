@@ -1,14 +1,23 @@
 import ext from "@shared/browser";
-import { getBookmarks, getFolders, getSettings, saveFolders, saveSettings } from "@shared/storage";
+import {
+  getBookmarks,
+  getFolders,
+  getProviderSyncState,
+  getSettings,
+  saveFolders,
+  saveSettings,
+} from "@shared/storage";
 import { applyStoredTheme, setTheme } from "@shared/theme";
 import type {
   BookmarkMap,
+  BrowserProviderConfig,
   Folder,
   FeedProviderConfig,
   LinkdingProviderConfig,
   JsonProviderConfig,
   MatchMode,
   ProviderConfig,
+  ProviderSyncStateMap,
   ProviderType,
   RuleCondition,
   RuleGroup,
@@ -30,6 +39,7 @@ const STATIC_DATA_URL =
 let folders: Folder[] = [];
 let providers: ProviderConfig[] = [];
 let bookmarks: BookmarkMap = {};
+let providerSyncState: ProviderSyncStateMap = {};
 let syncIntervalMinutes = 15;
 let theme: Theme = "system";
 let newTabCloseOnOpenAll = false;
@@ -38,15 +48,17 @@ let activeTabId = "overview";
 let tagSort: { key: "tag" | "count"; dir: "asc" | "desc" } = { key: "count", dir: "desc" };
 
 async function init(): Promise<void> {
-  const [settings, savedFolders, savedBookmarks] = await Promise.all([
+  const [settings, savedFolders, savedBookmarks, savedSyncState] = await Promise.all([
     getSettings(),
     getFolders(),
     getBookmarks(),
+    getProviderSyncState(),
   ]);
 
   folders = savedFolders;
   providers = settings.providers;
   bookmarks = savedBookmarks;
+  providerSyncState = savedSyncState;
   syncIntervalMinutes = settings.syncIntervalMinutes;
   theme = settings.theme;
   newTabCloseOnOpenAll = settings.newTabCloseOnOpenAll;
@@ -180,6 +192,12 @@ function renderOverviewPanel(): HTMLElement {
   });
   intervalLabel.appendChild(intervalInput);
   syncSection.appendChild(intervalLabel);
+  syncSection.appendChild(
+    hint(
+      "Providers whose source can change on its own (Linkding, web feeds, browser bookmarks) " +
+      "can override this interval on their own tab."
+    )
+  );
   root.appendChild(syncSection);
 
   // Appearance
@@ -292,6 +310,10 @@ function renderProviderPanel(providerId: string): HTMLElement {
   // feed items are a changing list of links, not stored bookmarks.
   const linkCount = providerBookmarkCount(provider.id);
   section.appendChild(sectionHeading("Synced content"));
+  const lastSyncAt = providerSyncState[provider.id]?.lastSyncAt;
+  if (lastSyncAt) {
+    section.appendChild(hint(`Last synced: ${new Date(lastSyncAt).toLocaleString()}`));
+  }
   if (linkCount === 0) {
     section.appendChild(
       hint("Nothing synced from this provider yet — save settings to trigger a sync, then reopen.")
@@ -614,6 +636,8 @@ function renderProviderConfig(provider: ProviderConfig, index: number): HTMLElem
     return renderFeedConfig(provider, index);
   }
   if (provider.type === "browser") {
+    const div = document.createElement("div");
+    div.className = "provider-config";
     const note = document.createElement("p");
     note.className = "provider-note";
     note.textContent =
@@ -622,7 +646,9 @@ function renderProviderConfig(provider: ProviderConfig, index: number): HTMLElem
       "\"crowdsourcing\"). Firefox's native bookmark tags are NOT readable via the extension API — only the " +
       "folder structure is. To match a folder rule by tag, put the bookmark inside a folder of that name. " +
       "Requests the bookmarks permission on first sync.";
-    return note;
+    div.appendChild(note);
+    div.appendChild(renderSyncIntervalOverride(provider));
+    return div;
   }
   if (provider.type === "static") {
     const div = document.createElement("div");
@@ -652,6 +678,33 @@ function renderProviderConfig(provider: ProviderConfig, index: number): HTMLElem
     return div;
   }
   return null;
+}
+
+// Optional per-provider override of the global sync interval — only offered on
+// providers whose source changes independently of the extension (linkding,
+// feeds, browser bookmarks); static/JSON data only changes via Save, which
+// triggers a sync anyway.
+function renderSyncIntervalOverride(
+  config: LinkdingProviderConfig | FeedProviderConfig | BrowserProviderConfig
+): HTMLElement {
+  const label = document.createElement("label");
+  label.textContent = "Sync interval override (minutes; empty = use the global Sync setting)";
+  const input = document.createElement("input");
+  input.type = "number";
+  input.className = "sync-interval-override";
+  input.min = "1";
+  input.placeholder = "global";
+  input.value = config.syncIntervalMinutes !== undefined ? String(config.syncIntervalMinutes) : "";
+  input.addEventListener("input", () => {
+    const n = parseInt(input.value, 10);
+    if (Number.isInteger(n) && n > 0) {
+      config.syncIntervalMinutes = n;
+    } else {
+      delete config.syncIntervalMinutes;
+    }
+  });
+  label.appendChild(input);
+  return label;
 }
 
 function renderLinkdingConfig(provider: LinkdingProviderConfig, index: number): HTMLElement {
@@ -694,6 +747,7 @@ function renderLinkdingConfig(provider: LinkdingProviderConfig, index: number): 
   div.appendChild(urlLabel);
   div.appendChild(usernameLabel);
   div.appendChild(tokenLabel);
+  div.appendChild(renderSyncIntervalOverride(provider));
   return div;
 }
 
@@ -774,6 +828,8 @@ function renderFeedConfig(provider: FeedProviderConfig, index: number): HTMLElem
   });
   maxLabel.appendChild(maxInput);
   div.appendChild(maxLabel);
+
+  div.appendChild(renderSyncIntervalOverride(provider));
 
   return div;
 }
