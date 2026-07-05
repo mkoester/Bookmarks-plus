@@ -15,8 +15,20 @@ import type {
 
 // Incremental syncs can't see deletions (linkding has no tombstone API; an
 // archived bookmark just vanishes from the list), so a full sync is forced at
-// least this often to reconcile them.
-export const FULL_SYNC_MAX_AGE_MS = 24 * 60 * 60 * 1000;
+// least this often (hours) to reconcile them. Per-provider configurable via
+// fullSyncIntervalHours.
+export const DEFAULT_FULL_SYNC_HOURS = 24;
+
+// The provider's full-sync ceiling in ms: its own fullSyncIntervalHours when
+// sane, otherwise the 24 h default.
+export function fullSyncMaxAgeMs(config: ProviderConfig): number {
+  const hours = "fullSyncIntervalHours" in config ? config.fullSyncIntervalHours : undefined;
+  const effective =
+    typeof hours === "number" && Number.isFinite(hours) && hours >= 1
+      ? hours
+      : DEFAULT_FULL_SYNC_HOURS;
+  return effective * 60 * 60 * 1000;
+}
 
 // The per-provider interval that actually applies: the provider's own override
 // when it's a sane positive number, otherwise the global setting.
@@ -52,15 +64,17 @@ export function isDue(
 
 // Whether the next sync must be a full one: no usable state yet, the config
 // changed since the state was written, or the periodic deletion-reconciliation
-// full sync is overdue.
+// full sync is overdue. Wall-clock based, so time spent asleep/powered off
+// counts — the first sync after wake goes full if the ceiling passed meanwhile.
 export function needsFullSync(
   state: ProviderSyncState | undefined,
   fingerprint: string,
-  nowMs: number
+  nowMs: number,
+  maxAgeMs: number
 ): boolean {
   if (!state || state.fingerprint !== fingerprint) return true;
   const lastFull = Date.parse(state.lastFullSyncAt);
-  return !(nowMs - lastFull < FULL_SYNC_MAX_AGE_MS);
+  return !(nowMs - lastFull < maxAgeMs);
 }
 
 // Stable digest of the sync-relevant config fields; a change invalidates the

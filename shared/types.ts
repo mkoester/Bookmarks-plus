@@ -92,6 +92,10 @@ export interface LinkdingProviderConfig extends BaseProviderConfig {
   username?: string; // display label only; not sent to the linkding API (token auth)
   // Optional override of Settings.syncIntervalMinutes for this provider only.
   syncIntervalMinutes?: number;
+  // How often (hours) an incremental-capable provider is forced through a FULL
+  // sync — the only way to catch deletions/archiving, which modified_since
+  // can't report. Absent = 24 (DEFAULT_FULL_SYNC_HOURS in shared/sync.ts).
+  fullSyncIntervalHours?: number;
 }
 
 export interface FeedProviderConfig extends BaseProviderConfig {
@@ -109,6 +113,9 @@ export interface FeedProviderConfig extends BaseProviderConfig {
   maxItems?: number;
   // Optional override of Settings.syncIntervalMinutes for this provider only.
   syncIntervalMinutes?: number;
+  // How often (hours) to skip the conditional GET and force an unconditional
+  // full fetch. Absent = 24 (DEFAULT_FULL_SYNC_HOURS in shared/sync.ts).
+  fullSyncIntervalHours?: number;
 }
 
 export type ProviderConfig =
@@ -222,10 +229,12 @@ export const DEFAULT_SETTINGS: Settings = {
 
 // ---- Messages ---------------------------------------------------------------
 
-export type MessageType = "sync_requested";
+export type MessageType = "sync_requested" | "sync_provider";
 
 export interface Message {
   type: MessageType;
+  // sync_provider only: the single provider to force-sync now.
+  providerId?: string;
 }
 
 // ---- Linkding API response --------------------------------------------------

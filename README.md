@@ -21,11 +21,12 @@ Browser extension for [Linkding](https://github.com/sissbruecker/linkding) — d
   middle-click; available on all surfaces including the New Tab page (which can
   optionally close itself after opening a whole folder)
 - Reorder whole folders by dragging, same as rule conditions
-- Background sync on timer + on New Tab open. Each provider can override the
-  global sync interval on its own settings tab. Syncs are incremental where the
-  source supports it — Linkding via `modified_since`, web feeds via HTTP
-  conditional GET (`ETag`/`Last-Modified`) — with a daily full sync to catch
-  deletions
+- Background sync on timer + on New Tab open, plus a per-provider "Sync now"
+  button. Each provider can override the global sync interval on its own
+  settings tab. Syncs are incremental where the source supports it — Linkding
+  via `modified_since`, web feeds via HTTP conditional GET
+  (`ETag`/`Last-Modified`) — with a periodic full sync (configurable, default
+  every 24 h) to catch deletions, which partial updates can't see
 - Import your browser's own bookmarks (folder names become tags)
 - Subscribe to web feeds — RSS 2.0/1.0, Atom, or [JSON Feed](https://www.jsonfeed.org/),
   auto-detected — a feed's current items appear as bookmarks (categories become

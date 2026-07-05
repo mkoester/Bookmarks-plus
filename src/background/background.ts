@@ -14,6 +14,7 @@ import {
   alarmPeriodMinutes,
   applySyncResult,
   effectiveIntervalMinutes,
+  fullSyncMaxAgeMs,
   isDue,
   maxModifiedCursor,
   mergeSyncErrors,
@@ -107,6 +108,14 @@ ext.runtime.onMessage.addListener(
       // Explicit user-initiated sync: bypass the time-based debounce.
       sync(true);
       sendResponse({ accepted: true });
+      return false;
+    }
+    if (message.type === "sync_provider" && message.providerId) {
+      // "Sync now" on one provider: respond only once the sync finished, so
+      // the options page can reload the sync state afterwards. Returning true
+      // keeps the message channel open for the async sendResponse.
+      sync(true, message.providerId).then(() => sendResponse({ done: true }));
+      return true;
     }
     return false;
   }
@@ -126,7 +135,10 @@ async function setupAlarm(): Promise<void> {
 
 // ---- Sync -------------------------------------------------------------------
 
-async function sync(force = false): Promise<void> {
+// force bypasses the debounce and the per-provider schedule (not the
+// incremental logic). onlyProviderId narrows a forced sync to one provider
+// (the "Sync now" button).
+async function sync(force = false, onlyProviderId?: string): Promise<void> {
   if (syncing) {
     debugLog("Sync already in progress, skipping");
     return;
@@ -150,6 +162,7 @@ async function sync(force = false): Promise<void> {
     let anyChange = false;
 
     for (const config of settings.providers) {
+      if (onlyProviderId !== undefined && config.id !== onlyProviderId) continue;
       const interval = effectiveIntervalMinutes(config, settings.syncIntervalMinutes);
       const state = syncState[config.id];
       // force (user-initiated) bypasses the schedule, not the incremental path —
@@ -158,7 +171,7 @@ async function sync(force = false): Promise<void> {
       attempted.add(config.id);
 
       const fingerprint = providerFingerprint(config);
-      const full = needsFullSync(state, fingerprint, now);
+      const full = needsFullSync(state, fingerprint, now, fullSyncMaxAgeMs(config));
       const ctx: SyncContext = {
         full,
         since: state?.cursor,

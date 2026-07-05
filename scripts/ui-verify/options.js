@@ -102,7 +102,14 @@ window.__verify.run(async ({ check, waitFor }) => {
   check("dropping folder0 at the end reorders the folders (" + namesAfter + ")", namesAfter === expected);
   check("folder marker cleared after drop", !document.querySelector(".folders-list .drop-marker"));
 
-  // --- Provider tab: per-provider sync interval override + last-synced ---
+  // --- Overview: Sync now button on remote-source provider rows ---
+  Array.from(document.querySelectorAll("#tab-bar button"))
+    .find((b) => b.textContent === "Overview")
+    ?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+  const overviewRow = document.querySelector(".provider-header");
+  check("overview provider row has a Sync now button", !!overviewRow.querySelector(".sync-now-btn"));
+
+  // --- Provider tab: interval override, full-sync interval, last-synced, Sync now ---
   Array.from(document.querySelectorAll("#tab-bar button"))
     .find((b) => b.textContent === "linkding (me)")
     ?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
@@ -112,8 +119,29 @@ window.__verify.run(async ({ check, waitFor }) => {
     "linkding tab has a sync-interval override input (empty = global)",
     !!override && override.value === "" && override.placeholder === "global"
   );
+  const fullSync = panel.querySelector("input.full-sync-interval");
+  check(
+    "linkding tab has a full-sync interval input (empty = 24h default)",
+    !!fullSync && fullSync.value === "" && fullSync.placeholder === "24"
+  );
   check(
     "provider tab shows the last-synced time",
     Array.from(panel.querySelectorAll(".hint")).some((h) => h.textContent.startsWith("Last synced:"))
   );
+
+  // Sync now sits in the actions row next to Remove and asks the background
+  // to sync exactly this provider.
+  const sent = [];
+  chrome.runtime.sendMessage = (msg) => { sent.push(msg); return Promise.resolve({ done: true }); };
+  const syncNow = panel.querySelector(".provider-actions .sync-now-btn");
+  check(
+    "provider tab has Sync now next to Remove provider",
+    !!syncNow && !!panel.querySelector(".provider-actions .remove-provider-btn")
+  );
+  syncNow.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+  check(
+    "Sync now sends sync_provider for this provider id",
+    sent.length === 1 && sent[0].type === "sync_provider" && sent[0].providerId === "ld"
+  );
+  check("Sync now disables itself while syncing", syncNow.disabled === true);
 });

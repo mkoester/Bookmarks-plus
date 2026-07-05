@@ -1,10 +1,11 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
-  FULL_SYNC_MAX_AGE_MS,
+  DEFAULT_FULL_SYNC_HOURS,
   alarmPeriodMinutes,
   applySyncResult,
   effectiveIntervalMinutes,
+  fullSyncMaxAgeMs,
   isDue,
   maxModifiedCursor,
   mergeSyncErrors,
@@ -92,15 +93,33 @@ test("isDue: based on last attempt vs interval", () => {
   assert.equal(isDue(state({ lastAttemptAt: recent }), 15, NOW), false);
 });
 
-// ---- needsFullSync --------------------------------------------------------------
+// ---- needsFullSync / fullSyncMaxAgeMs -------------------------------------------
+
+const DAY_MS = DEFAULT_FULL_SYNC_HOURS * 3600_000;
 
 test("needsFullSync: no state, changed fingerprint, or stale/absent full sync", () => {
-  assert.equal(needsFullSync(undefined, "fp", NOW), true);
-  assert.equal(needsFullSync(state({ fingerprint: "other" }), "fp", NOW), true);
-  assert.equal(needsFullSync(state({ lastFullSyncAt: "" }), "fp", NOW), true);
-  const old = new Date(NOW - FULL_SYNC_MAX_AGE_MS - 1).toISOString();
-  assert.equal(needsFullSync(state({ lastFullSyncAt: old }), "fp", NOW), true);
-  assert.equal(needsFullSync(state(), "fp", NOW), false);
+  assert.equal(needsFullSync(undefined, "fp", NOW, DAY_MS), true);
+  assert.equal(needsFullSync(state({ fingerprint: "other" }), "fp", NOW, DAY_MS), true);
+  assert.equal(needsFullSync(state({ lastFullSyncAt: "" }), "fp", NOW, DAY_MS), true);
+  const old = new Date(NOW - DAY_MS - 1).toISOString();
+  assert.equal(needsFullSync(state({ lastFullSyncAt: old }), "fp", NOW, DAY_MS), true);
+  assert.equal(needsFullSync(state(), "fp", NOW, DAY_MS), false);
+});
+
+test("needsFullSync: elapsed wall-clock time counts (sleep/power-off is caught)", () => {
+  // Last full sync 20h ago with a 24h ceiling: not yet due…
+  const t = new Date(NOW - 20 * 3600_000).toISOString();
+  assert.equal(needsFullSync(state({ lastFullSyncAt: t }), "fp", NOW, DAY_MS), false);
+  // …but after the machine slept for 8 more hours, the same state is overdue.
+  assert.equal(needsFullSync(state({ lastFullSyncAt: t }), "fp", NOW + 8 * 3600_000, DAY_MS), true);
+});
+
+test("fullSyncMaxAgeMs: per-provider hours when sane, 24h default otherwise", () => {
+  assert.equal(fullSyncMaxAgeMs(linkdingConfig({ fullSyncIntervalHours: 6 })), 6 * 3600_000);
+  assert.equal(fullSyncMaxAgeMs(linkdingConfig()), DAY_MS);
+  assert.equal(fullSyncMaxAgeMs(linkdingConfig({ fullSyncIntervalHours: 0 })), DAY_MS);
+  // static has no such field at all
+  assert.equal(fullSyncMaxAgeMs({ id: "s", type: "static", name: "static" }), DAY_MS);
 });
 
 // ---- providerFingerprint --------------------------------------------------------

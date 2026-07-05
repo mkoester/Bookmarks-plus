@@ -16,6 +16,7 @@ import type {
   LinkdingProviderConfig,
   JsonProviderConfig,
   MatchMode,
+  Message,
   ProviderConfig,
   ProviderSyncStateMap,
   ProviderType,
@@ -344,13 +345,49 @@ function renderProviderPanel(providerId: string): HTMLElement {
     }
   }
 
+  const actions = document.createElement("div");
+  actions.className = "provider-actions";
+  const syncBtn = renderSyncNowButton(provider);
+  if (syncBtn) actions.appendChild(syncBtn);
+
   const removeBtn = document.createElement("button");
   removeBtn.className = "remove-provider-btn";
   removeBtn.textContent = "Remove provider";
   removeBtn.addEventListener("click", () => removeProvider(provider.id));
-  section.appendChild(removeBtn);
+  actions.appendChild(removeBtn);
+  section.appendChild(actions);
 
   return section;
+}
+
+// "Sync now" only exists for providers whose source changes on its own — the
+// same set that gets a sync-interval override; static/JSON data only changes
+// via Save, which already triggers a sync.
+function renderSyncNowButton(provider: ProviderConfig): HTMLElement | null {
+  if (provider.type !== "linkding" && provider.type !== "browser" && !isFeedProvider(provider)) {
+    return null;
+  }
+  const btn = document.createElement("button");
+  btn.className = "sync-now-btn";
+  btn.textContent = "Sync now";
+  btn.title = "Sync this provider now (uses the last saved settings)";
+  btn.addEventListener("click", () => syncProviderNow(provider.id, btn));
+  return btn;
+}
+
+// Forces a sync of one provider and refreshes the panel afterwards (the
+// background responds once the sync finished, so last-synced/tag counts are
+// fresh on re-render).
+async function syncProviderNow(providerId: string, button: HTMLButtonElement): Promise<void> {
+  button.disabled = true;
+  button.textContent = "Syncing…";
+  try {
+    await ext.runtime.sendMessage({ type: "sync_provider", providerId } satisfies Message);
+  } catch {
+    // background not ready — fall through, re-render restores the button
+  }
+  [providerSyncState, bookmarks] = await Promise.all([getProviderSyncState(), getBookmarks()]);
+  renderTabs();
 }
 
 function providerTabLabel(provider: ProviderConfig): string {
@@ -563,6 +600,8 @@ function renderProviderRow(provider: ProviderConfig): HTMLElement {
 
   header.appendChild(link);
   header.appendChild(typeBadge);
+  const syncBtn = renderSyncNowButton(provider);
+  if (syncBtn) header.appendChild(syncBtn);
   header.appendChild(removeBtn);
   div.appendChild(header);
 
@@ -707,6 +746,36 @@ function renderSyncIntervalOverride(
   return label;
 }
 
+// How often an incremental-capable provider (linkding, feeds) is forced
+// through a full sync. Incremental updates can't see deletions — linkding's
+// modified_since never reports deleted/archived bookmarks — so this is the
+// worst-case staleness for them.
+function renderFullSyncInterval(
+  config: LinkdingProviderConfig | FeedProviderConfig
+): HTMLElement {
+  const label = document.createElement("label");
+  label.textContent =
+    "Full sync every N hours (default 24) — partial syncs can't detect deleted entries; " +
+    "this bounds how long a deletion can go unnoticed";
+  const input = document.createElement("input");
+  input.type = "number";
+  input.className = "full-sync-interval";
+  input.min = "1";
+  input.placeholder = "24";
+  input.value =
+    config.fullSyncIntervalHours !== undefined ? String(config.fullSyncIntervalHours) : "";
+  input.addEventListener("input", () => {
+    const n = parseInt(input.value, 10);
+    if (Number.isInteger(n) && n > 0) {
+      config.fullSyncIntervalHours = n;
+    } else {
+      delete config.fullSyncIntervalHours;
+    }
+  });
+  label.appendChild(input);
+  return label;
+}
+
 function renderLinkdingConfig(provider: LinkdingProviderConfig, index: number): HTMLElement {
   const div = document.createElement("div");
   div.className = "provider-config";
@@ -748,6 +817,7 @@ function renderLinkdingConfig(provider: LinkdingProviderConfig, index: number): 
   div.appendChild(usernameLabel);
   div.appendChild(tokenLabel);
   div.appendChild(renderSyncIntervalOverride(provider));
+  div.appendChild(renderFullSyncInterval(provider));
   return div;
 }
 
@@ -830,6 +900,7 @@ function renderFeedConfig(provider: FeedProviderConfig, index: number): HTMLElem
   div.appendChild(maxLabel);
 
   div.appendChild(renderSyncIntervalOverride(provider));
+  div.appendChild(renderFullSyncInterval(provider));
 
   return div;
 }
