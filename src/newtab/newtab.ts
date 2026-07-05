@@ -1,9 +1,10 @@
 import ext from "@shared/browser";
-import { getBookmarks, getFolders, getSyncStatus } from "@shared/storage";
+import { getBookmarks, getFolders, getSettings, getSyncStatus } from "@shared/storage";
 import { applyStoredTheme } from "@shared/theme";
 import { renderSyncErrorBanner } from "@shared/syncBanner";
 import { renderBookmarkItem } from "@shared/folderList";
-import type { BookmarkMap, Folder, Message, SyncStatus } from "@shared/types";
+import { safeFolderBookmarks } from "@shared/bookmarks";
+import type { Bookmark, BookmarkMap, Folder, Message, SyncStatus } from "@shared/types";
 
 // Skip re-rendering (and aborting in-flight favicon loads) when a sync writes
 // back data that's identical to what's already on screen.
@@ -75,7 +76,29 @@ function renderFolder(folder: Folder, bookmarkMap: BookmarkMap): HTMLElement {
   section.className = "folder";
 
   const heading = document.createElement("h2");
-  heading.textContent = folder.name;
+  const nameSpan = document.createElement("span");
+  nameSpan.className = "folder-name";
+  nameSpan.textContent = folder.name;
+  heading.appendChild(nameSpan);
+
+  // Same folder-level affordance as the popup/sidebar summaries: an always-
+  // visible button plus middle-click as a mouse-only bonus shortcut.
+  const openAllBtn = document.createElement("button");
+  openAllBtn.type = "button";
+  openAllBtn.className = "open-all-btn";
+  openAllBtn.title = "Open all in background tabs";
+  openAllBtn.setAttribute("aria-label", `Open all bookmarks in ${folder.name}`);
+  openAllBtn.textContent = "⇱";
+  openAllBtn.addEventListener("click", () => {
+    openAll(safeFolderBookmarks(folder, bookmarkMap));
+  });
+  heading.appendChild(openAllBtn);
+  heading.addEventListener("mousedown", (e) => {
+    if (e.button !== 1) return;
+    e.preventDefault();
+    openAll(safeFolderBookmarks(folder, bookmarkMap));
+  });
+
   section.appendChild(heading);
 
   const list = document.createElement("ul");
@@ -83,13 +106,40 @@ function renderFolder(folder: Folder, bookmarkMap: BookmarkMap): HTMLElement {
   for (const id of folder.bookmark_ids) {
     const bookmark = bookmarkMap[id];
     if (bookmark) {
-      // No onOpen: bookmarks are plain anchors opening a new tab natively.
-      list.appendChild(renderBookmarkItem(bookmark, { faviconSize: 16 }));
+      // No onOpen: bookmarks are plain anchors opening a new tab natively
+      // (keeps native middle-click/ctrl-click working unmodified). The
+      // background button is additive on top of that.
+      list.appendChild(
+        renderBookmarkItem(bookmark, {
+          faviconSize: 16,
+          onOpenBackground: (b) => {
+            ext.tabs.create({ url: b.url, active: false });
+          },
+        })
+      );
     }
   }
 
   section.appendChild(list);
   return section;
+}
+
+// Opens a folder's bookmarks in background tabs. Whether the New Tab page
+// itself then closes is the user's call (Settings, New Tab section); default
+// is to keep it open. Settings are read at click time, so an options-page
+// change applies without this page re-rendering.
+async function openAll(bookmarks: Bookmark[]): Promise<void> {
+  for (const bookmark of bookmarks) {
+    ext.tabs.create({ url: bookmark.url, active: false });
+  }
+  const settings = await getSettings();
+  if (!settings.newTabCloseOnOpenAll) return;
+  // window.close() is unreliable for a page the script didn't open; the tabs
+  // API can always close its own tab.
+  const tab = await ext.tabs.getCurrent();
+  if (tab?.id !== undefined) {
+    ext.tabs.remove(tab.id);
+  }
 }
 
 // ---- Sync -------------------------------------------------------------------

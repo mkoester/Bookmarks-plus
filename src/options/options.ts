@@ -1,14 +1,24 @@
 import ext from "@shared/browser";
-import { getBookmarks, getFolders, getSettings, saveFolders, saveSettings } from "@shared/storage";
+import {
+  getBookmarks,
+  getFolders,
+  getProviderSyncState,
+  getSettings,
+  saveFolders,
+  saveSettings,
+} from "@shared/storage";
 import { applyStoredTheme, setTheme } from "@shared/theme";
 import type {
   BookmarkMap,
+  BrowserProviderConfig,
   Folder,
   FeedProviderConfig,
   LinkdingProviderConfig,
   JsonProviderConfig,
   MatchMode,
+  Message,
   ProviderConfig,
+  ProviderSyncStateMap,
   ProviderType,
   RuleCondition,
   RuleGroup,
@@ -25,29 +35,34 @@ const SINGLETON_PROVIDER_TYPES = new Set<ProviderType>(["static", "browser"]);
 // The bundled demo bookmarks/folders, so users can see what tags/titles/URLs the
 // static provider supplies when crafting folder rules.
 const STATIC_DATA_URL =
-  "https://raw.githubusercontent.com/mkoester/linkding-ext/refs/heads/main/shared/data/static.ts";
+  "https://raw.githubusercontent.com/mkoester/Bookmarks-plus/refs/heads/main/shared/data/static.ts";
 
 let folders: Folder[] = [];
 let providers: ProviderConfig[] = [];
 let bookmarks: BookmarkMap = {};
+let providerSyncState: ProviderSyncStateMap = {};
 let syncIntervalMinutes = 15;
 let theme: Theme = "system";
+let newTabCloseOnOpenAll = false;
 let grantedHostOrigins: string[] = [];
 let activeTabId = "overview";
 let tagSort: { key: "tag" | "count"; dir: "asc" | "desc" } = { key: "count", dir: "desc" };
 
 async function init(): Promise<void> {
-  const [settings, savedFolders, savedBookmarks] = await Promise.all([
+  const [settings, savedFolders, savedBookmarks, savedSyncState] = await Promise.all([
     getSettings(),
     getFolders(),
     getBookmarks(),
+    getProviderSyncState(),
   ]);
 
   folders = savedFolders;
   providers = settings.providers;
   bookmarks = savedBookmarks;
+  providerSyncState = savedSyncState;
   syncIntervalMinutes = settings.syncIntervalMinutes;
   theme = settings.theme;
+  newTabCloseOnOpenAll = settings.newTabCloseOnOpenAll;
 
   await applyStoredTheme();
   await loadGrantedOrigins();
@@ -178,6 +193,12 @@ function renderOverviewPanel(): HTMLElement {
   });
   intervalLabel.appendChild(intervalInput);
   syncSection.appendChild(intervalLabel);
+  syncSection.appendChild(
+    hint(
+      "Providers whose source can change on its own (Linkding, web feeds, browser bookmarks) " +
+      "can override this interval on their own tab."
+    )
+  );
   root.appendChild(syncSection);
 
   // Appearance
@@ -215,6 +236,22 @@ function renderOverviewPanel(): HTMLElement {
       "prompt the first time. When New Tab is handed to Bookmarks+, new tabs show the launcher."
     )
   );
+
+  const closeLabel = document.createElement("label");
+  closeLabel.className = "checkbox";
+  const closeInput = document.createElement("input");
+  closeInput.type = "checkbox";
+  closeInput.checked = newTabCloseOnOpenAll;
+  closeInput.addEventListener("change", () => {
+    newTabCloseOnOpenAll = closeInput.checked;
+  });
+  closeLabel.appendChild(closeInput);
+  closeLabel.append(
+    "Close the New Tab page after \"Open all in background tabs\" on a folder " +
+    "(unchecked: the launcher stays open)"
+  );
+  newTabSection.appendChild(closeLabel);
+
   root.appendChild(newTabSection);
 
   return root;
@@ -234,9 +271,15 @@ function renderFoldersPanel(): HTMLElement {
   section.appendChild(renderLogicHelp());
   section.appendChild(renderSortHelp());
 
+  // Dedicated container so folder drag-reorder has a clean sibling list (and a
+  // positioning context for its .drop-marker) — the section also holds
+  // headings, help blocks and buttons.
+  const list = document.createElement("div");
+  list.className = "folders-list";
   folders.forEach((folder, index) => {
-    section.appendChild(renderFolderEditor(folder, index));
+    list.appendChild(renderFolderEditor(folder, index, list));
   });
+  section.appendChild(list);
 
   const addFolderBtn = document.createElement("button");
   addFolderBtn.textContent = "+ Add folder";
@@ -268,6 +311,10 @@ function renderProviderPanel(providerId: string): HTMLElement {
   // feed items are a changing list of links, not stored bookmarks.
   const linkCount = providerBookmarkCount(provider.id);
   section.appendChild(sectionHeading("Synced content"));
+  const lastSyncAt = providerSyncState[provider.id]?.lastSyncAt;
+  if (lastSyncAt) {
+    section.appendChild(hint(`Last synced: ${new Date(lastSyncAt).toLocaleString()}`));
+  }
   if (linkCount === 0) {
     section.appendChild(
       hint("Nothing synced from this provider yet — save settings to trigger a sync, then reopen.")
@@ -298,13 +345,49 @@ function renderProviderPanel(providerId: string): HTMLElement {
     }
   }
 
+  const actions = document.createElement("div");
+  actions.className = "provider-actions";
+  const syncBtn = renderSyncNowButton(provider);
+  if (syncBtn) actions.appendChild(syncBtn);
+
   const removeBtn = document.createElement("button");
   removeBtn.className = "remove-provider-btn";
   removeBtn.textContent = "Remove provider";
   removeBtn.addEventListener("click", () => removeProvider(provider.id));
-  section.appendChild(removeBtn);
+  actions.appendChild(removeBtn);
+  section.appendChild(actions);
 
   return section;
+}
+
+// "Sync now" only exists for providers whose source changes on its own — the
+// same set that gets a sync-interval override; static/JSON data only changes
+// via Save, which already triggers a sync.
+function renderSyncNowButton(provider: ProviderConfig): HTMLElement | null {
+  if (provider.type !== "linkding" && provider.type !== "browser" && !isFeedProvider(provider)) {
+    return null;
+  }
+  const btn = document.createElement("button");
+  btn.className = "sync-now-btn";
+  btn.textContent = "Sync now";
+  btn.title = "Sync this provider now (uses the last saved settings)";
+  btn.addEventListener("click", () => syncProviderNow(provider.id, btn));
+  return btn;
+}
+
+// Forces a sync of one provider and refreshes the panel afterwards (the
+// background responds once the sync finished, so last-synced/tag counts are
+// fresh on re-render).
+async function syncProviderNow(providerId: string, button: HTMLButtonElement): Promise<void> {
+  button.disabled = true;
+  button.textContent = "Syncing…";
+  try {
+    await ext.runtime.sendMessage({ type: "sync_provider", providerId } satisfies Message);
+  } catch {
+    // background not ready — fall through, re-render restores the button
+  }
+  [providerSyncState, bookmarks] = await Promise.all([getProviderSyncState(), getBookmarks()]);
+  renderTabs();
 }
 
 function providerTabLabel(provider: ProviderConfig): string {
@@ -451,7 +534,7 @@ async function save(): Promise<void> {
     return;
   }
 
-  const settings: Settings = { syncIntervalMinutes, providers, theme };
+  const settings: Settings = { syncIntervalMinutes, providers, theme, newTabCloseOnOpenAll };
 
   // Permission request must be the first await — user gesture activation expires after the first
   // async operation in Firefox. Bundle the bookmarks permission (browser provider) and the host
@@ -517,6 +600,8 @@ function renderProviderRow(provider: ProviderConfig): HTMLElement {
 
   header.appendChild(link);
   header.appendChild(typeBadge);
+  const syncBtn = renderSyncNowButton(provider);
+  if (syncBtn) header.appendChild(syncBtn);
   header.appendChild(removeBtn);
   div.appendChild(header);
 
@@ -590,6 +675,8 @@ function renderProviderConfig(provider: ProviderConfig, index: number): HTMLElem
     return renderFeedConfig(provider, index);
   }
   if (provider.type === "browser") {
+    const div = document.createElement("div");
+    div.className = "provider-config";
     const note = document.createElement("p");
     note.className = "provider-note";
     note.textContent =
@@ -598,7 +685,9 @@ function renderProviderConfig(provider: ProviderConfig, index: number): HTMLElem
       "\"crowdsourcing\"). Firefox's native bookmark tags are NOT readable via the extension API — only the " +
       "folder structure is. To match a folder rule by tag, put the bookmark inside a folder of that name. " +
       "Requests the bookmarks permission on first sync.";
-    return note;
+    div.appendChild(note);
+    div.appendChild(renderSyncIntervalOverride(provider));
+    return div;
   }
   if (provider.type === "static") {
     const div = document.createElement("div");
@@ -628,6 +717,63 @@ function renderProviderConfig(provider: ProviderConfig, index: number): HTMLElem
     return div;
   }
   return null;
+}
+
+// Optional per-provider override of the global sync interval — only offered on
+// providers whose source changes independently of the extension (linkding,
+// feeds, browser bookmarks); static/JSON data only changes via Save, which
+// triggers a sync anyway.
+function renderSyncIntervalOverride(
+  config: LinkdingProviderConfig | FeedProviderConfig | BrowserProviderConfig
+): HTMLElement {
+  const label = document.createElement("label");
+  label.textContent = "Sync interval override (minutes; empty = use the global Sync setting)";
+  const input = document.createElement("input");
+  input.type = "number";
+  input.className = "sync-interval-override";
+  input.min = "1";
+  input.placeholder = "global";
+  input.value = config.syncIntervalMinutes !== undefined ? String(config.syncIntervalMinutes) : "";
+  input.addEventListener("input", () => {
+    const n = parseInt(input.value, 10);
+    if (Number.isInteger(n) && n > 0) {
+      config.syncIntervalMinutes = n;
+    } else {
+      delete config.syncIntervalMinutes;
+    }
+  });
+  label.appendChild(input);
+  return label;
+}
+
+// How often an incremental-capable provider (linkding, feeds) is forced
+// through a full sync. Incremental updates can't see deletions — linkding's
+// modified_since never reports deleted/archived bookmarks — so this is the
+// worst-case staleness for them.
+function renderFullSyncInterval(
+  config: LinkdingProviderConfig | FeedProviderConfig
+): HTMLElement {
+  const label = document.createElement("label");
+  label.textContent =
+    "Full sync every N hours (default 24) — partial syncs can't detect deleted entries; " +
+    "this bounds how long a deletion can go unnoticed";
+  const input = document.createElement("input");
+  input.type = "number";
+  input.className = "full-sync-interval";
+  input.min = "1";
+  input.placeholder = "24";
+  input.value =
+    config.fullSyncIntervalHours !== undefined ? String(config.fullSyncIntervalHours) : "";
+  input.addEventListener("input", () => {
+    const n = parseInt(input.value, 10);
+    if (Number.isInteger(n) && n > 0) {
+      config.fullSyncIntervalHours = n;
+    } else {
+      delete config.fullSyncIntervalHours;
+    }
+  });
+  label.appendChild(input);
+  return label;
 }
 
 function renderLinkdingConfig(provider: LinkdingProviderConfig, index: number): HTMLElement {
@@ -670,6 +816,8 @@ function renderLinkdingConfig(provider: LinkdingProviderConfig, index: number): 
   div.appendChild(urlLabel);
   div.appendChild(usernameLabel);
   div.appendChild(tokenLabel);
+  div.appendChild(renderSyncIntervalOverride(provider));
+  div.appendChild(renderFullSyncInterval(provider));
   return div;
 }
 
@@ -750,6 +898,9 @@ function renderFeedConfig(provider: FeedProviderConfig, index: number): HTMLElem
   });
   maxLabel.appendChild(maxInput);
   div.appendChild(maxLabel);
+
+  div.appendChild(renderSyncIntervalOverride(provider));
+  div.appendChild(renderFullSyncInterval(provider));
 
   return div;
 }
@@ -867,12 +1018,22 @@ function renderSortHelp(): HTMLElement {
 // renderTabs() re-renders (same pattern as tagSort).
 const jsonEdit = new Map<string, { text: string; error: string | null }>();
 
-function renderFolderEditor(folder: Folder, index: number): HTMLElement {
+function renderFolderEditor(folder: Folder, index: number, listContainer: HTMLElement): HTMLElement {
   const div = document.createElement("div");
   div.className = "folder-editor";
 
   const header = document.createElement("div");
   header.className = "folder-header";
+
+  // Folder order is the display order on every surface (folders are saved as
+  // an array), so folders reorder with the same pointer-drag as rule rows.
+  const handle = document.createElement("span");
+  handle.className = "drag-handle";
+  handle.title = "Drag to reorder";
+  handle.textContent = "⠿";
+  header.appendChild(handle);
+  div.classList.add("drag-row");
+  wireReorderHandle(handle, div, listContainer, folders, index);
 
   const nameInput = document.createElement("input");
   nameInput.type = "text";
@@ -1038,7 +1199,7 @@ function renderGroupEditor(
     handleParent?.insertBefore(handle, handleParent.firstChild);
 
     child.classList.add("drag-row"); // query hook for the reorder geometry below
-    wireReorderHandle(handle, child, conditionsDiv, group, i);
+    wireReorderHandle(handle, child, conditionsDiv, group.conditions, i);
 
     conditionsDiv.appendChild(child);
   });
@@ -1067,17 +1228,17 @@ function renderGroupEditor(
   return div;
 }
 
-// Pointer-based drag reorder for one rule row (leaf condition or nested group)
-// within its own group's conditions array. Chosen over native HTML5 drag-and-
-// drop because native DnD can't reliably start from a row full of form controls
-// in Firefox, gives no easy live drop indicator, and doesn't work on touch.
-// Reorders siblings only (order has no effect on match semantics — editing
-// convenience). A floating .drop-marker shows where the row would land.
+// Pointer-based drag reorder for one row within its backing array — used for
+// rule rows (a group's conditions) and for whole folder editors (the folders
+// list). Chosen over native HTML5 drag-and-drop because native DnD can't
+// reliably start from a row full of form controls in Firefox, gives no easy
+// live drop indicator, and doesn't work on touch. Reorders siblings only.
+// A floating .drop-marker shows where the row would land.
 function wireReorderHandle(
   handle: HTMLElement,
   row: HTMLElement,
   container: HTMLElement,
-  group: RuleGroup,
+  items: unknown[],
   fromIndex: number
 ): void {
   handle.addEventListener("pointerdown", (e) => {
@@ -1124,8 +1285,8 @@ function wireReorderHandle(
       // toIndex is an "insert before" position; before self or the slot right
       // after self are both no-ops.
       if (to === fromIndex || to === fromIndex + 1) return;
-      const [moved] = group.conditions.splice(fromIndex, 1);
-      group.conditions.splice(fromIndex < to ? to - 1 : to, 0, moved);
+      const [moved] = items.splice(fromIndex, 1);
+      items.splice(fromIndex < to ? to - 1 : to, 0, moved);
       renderTabs();
     };
 

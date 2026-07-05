@@ -1,12 +1,31 @@
-import type { Bookmark, BookmarkProvider, LinkdingProviderConfig, LinkdingResponse } from "../types";
+import type {
+  Bookmark,
+  BookmarkProvider,
+  LinkdingProviderConfig,
+  LinkdingResponse,
+  SyncContext,
+  SyncResult,
+} from "../types";
 import { toIsoDate } from "../validation";
 
 export class LinkdingProvider implements BookmarkProvider {
   constructor(private config: LinkdingProviderConfig) {}
 
-  async sync(): Promise<Bookmark[]> {
+  async sync(ctx?: SyncContext): Promise<SyncResult> {
+    // Incremental: only bookmarks modified after the cursor (the highest
+    // date_modified seen so far — the server's clock, so client skew can't
+    // lose updates). Deletions/archiving are invisible to modified_since;
+    // the background loop forces a periodic full sync to reconcile them.
+    const since = ctx && !ctx.full ? ctx.since : undefined;
+
+    const query = new URLSearchParams({ limit: "100" });
+    if (since !== undefined) query.set("modified_since", since);
+
     const bookmarks: Bookmark[] = [];
-    let url: string | null = new URL("/api/bookmarks/?limit=100", this.config.url).toString();
+    let url: string | null = new URL(
+      `/api/bookmarks/?${query.toString()}`,
+      this.config.url
+    ).toString();
 
     while (url) {
       const response = await this.fetchPage(url);
@@ -26,7 +45,7 @@ export class LinkdingProvider implements BookmarkProvider {
       url = response.next;
     }
 
-    return bookmarks;
+    return { kind: since !== undefined ? "incremental" : "full", bookmarks };
   }
 
   private async fetchPage(url: string): Promise<LinkdingResponse> {

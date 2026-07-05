@@ -1,6 +1,8 @@
-# linkding-ext
+# Bookmarks+ (Bookmarks-plus)
 
 Browser extension for [Linkding](https://github.com/sissbruecker/linkding) — displays your bookmarks as a customizable folder-based launcher on the New Tab page and popup.
+
+> Repository renamed from `linkding-ext` to `Bookmarks-plus` on 2026-07-05 (GitHub redirects the old URLs).
 
 ## Features
 
@@ -16,9 +18,15 @@ Browser extension for [Linkding](https://github.com/sissbruecker/linkding) — d
   matches higher
 - Open every bookmark in a folder in background tabs with one button, or open a
   single bookmark in the background — works on trackpads and touch, not just
-  middle-click
-- Background sync on timer + on New Tab open (full sync each time; incremental
-  sync via Linkding's `modified_since` is a possible future optimisation)
+  middle-click; available on all surfaces including the New Tab page (which can
+  optionally close itself after opening a whole folder)
+- Reorder whole folders by dragging, same as rule conditions
+- Background sync on timer + on New Tab open, plus a per-provider "Sync now"
+  button. Each provider can override the global sync interval on its own
+  settings tab. Syncs are incremental where the source supports it — Linkding
+  via `modified_since`, web feeds via HTTP conditional GET
+  (`ETag`/`Last-Modified`) — with a periodic full sync (configurable, default
+  every 24 h) to catch deletions, which partial updates can't see
 - Import your browser's own bookmarks (folder names become tags)
 - Subscribe to web feeds — RSS 2.0/1.0, Atom, or [JSON Feed](https://www.jsonfeed.org/),
   auto-detected — a feed's current items appear as bookmarks (categories become

@@ -1,4 +1,9 @@
-import type { Bookmark, BookmarkProvider, FeedProviderConfig } from "../types";
+import type {
+  BookmarkProvider,
+  FeedProviderConfig,
+  SyncContext,
+  SyncResult,
+} from "../types";
 import type { JsonFeedParseResult } from "../validation";
 import { parseJsonFeed } from "../validation";
 import { parseXmlFeed, decodeFeedBytes } from "../rss";
@@ -18,10 +23,28 @@ function stripBom(text: string): string {
 export class FeedProvider implements BookmarkProvider {
   constructor(private config: FeedProviderConfig) {}
 
-  async sync(): Promise<Bookmark[]> {
-    if (!this.config.url.trim()) return [];
+  async sync(ctx?: SyncContext): Promise<SyncResult> {
+    if (!this.config.url.trim()) return { kind: "full", bookmarks: [] };
 
-    const response = await fetch(this.config.url, { headers: { Accept: ACCEPT } });
+    // Feeds have no standard delta protocol — a body is always the complete
+    // current item list. The saving is the HTTP conditional GET: send the
+    // validators from the last 200 response and a supporting server answers
+    // 304 with no body (skips download + parse). cache: "no-store" bypasses
+    // the browser HTTP cache so OUR validators reach the server instead of
+    // being answered (or rewritten) by the cache.
+    const conditional: Record<string, string> = {};
+    if (ctx && !ctx.full) {
+      if (ctx.etag) conditional["If-None-Match"] = ctx.etag;
+      if (ctx.lastModified) conditional["If-Modified-Since"] = ctx.lastModified;
+    }
+
+    const response = await fetch(this.config.url, {
+      headers: { Accept: ACCEPT, ...conditional },
+      cache: "no-store",
+    });
+    if (response.status === 304) {
+      return { kind: "unchanged", bookmarks: [] };
+    }
     if (!response.ok) {
       throw new Error(`Feed error: HTTP ${response.status}`);
     }
@@ -59,6 +82,16 @@ export class FeedProvider implements BookmarkProvider {
     }
 
     const max = this.config.maxItems;
-    return max !== undefined && max > 0 ? latestN(result.bookmarks, max) : result.bookmarks;
+    const bookmarks =
+      max !== undefined && max > 0 ? latestN(result.bookmarks, max) : result.bookmarks;
+
+    const etag = response.headers.get("ETag");
+    const lastModified = response.headers.get("Last-Modified");
+    return {
+      kind: "full",
+      bookmarks,
+      ...(etag ? { etag } : {}),
+      ...(lastModified ? { lastModified } : {}),
+    };
   }
 }

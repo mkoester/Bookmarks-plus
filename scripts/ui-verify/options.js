@@ -10,9 +10,11 @@ window.__verify.run(async ({ check, waitFor }) => {
   const fe = () => document.querySelector(".folder-editor");
   check("folder editors render", !!fe());
 
-  // Header holds only the name + JSON/Remove buttons; Latest/Sort live on their
-  // own row below (the layout fix that stopped the header overflowing).
-  check("folder-header has name + 2 buttons", fe().querySelector(".folder-header").children.length === 3);
+  // Header holds the drag handle, the name and the JSON/Remove buttons;
+  // Latest/Sort live on their own row below (the layout fix that stopped the
+  // header overflowing).
+  check("folder-header has handle + name + 2 buttons", fe().querySelector(".folder-header").children.length === 4);
+  check("folder editors are drag rows with a header handle", fe().classList.contains("drag-row") && !!fe().querySelector(".folder-header > .drag-handle"));
   const settings = fe().querySelector(".folder-settings");
   check("folder-settings row has Latest + Sort", !!settings?.querySelector(".folder-limit") && !!settings?.querySelector(".folder-sort"));
 
@@ -79,4 +81,67 @@ window.__verify.run(async ({ check, waitFor }) => {
   check("dropping row0 at the end reorders to row1,row2,row0 (" + orderAfter.join(",") + ")", orderAfter.join(",") === "row1,row2,row0");
   check("marker cleared after drop", !fe().querySelector(".drop-marker"));
   check("no row left dimmed after drop", !fe().querySelector(".dragging"));
+
+  // --- Folder drag-reorder (same pointer mechanism, folders array) ---
+  const folderRows = () => Array.from(document.querySelectorAll(".folders-list > .drag-row"));
+  const folderNames = () =>
+    folderRows().map((r) => r.querySelector(".folder-header input[type=text]").value);
+  check("demo folders render as drag rows", folderRows().length >= 2);
+
+  const namesBefore = folderNames();
+  const expected = namesBefore.slice(1).concat(namesBefore[0]).join(",");
+  const fHandle = folderRows()[0].querySelector(".folder-header .drag-handle");
+  const fBelowAll = folderRows()[folderRows().length - 1].getBoundingClientRect().bottom + 5;
+
+  fHandle.dispatchEvent(pe("pointerdown", folderRows()[0].getBoundingClientRect().top + 5));
+  check("folder drop marker appears in the folders list", !!document.querySelector(".folders-list > .drop-marker"));
+  fHandle.dispatchEvent(pe("pointermove", fBelowAll));
+  fHandle.dispatchEvent(pe("pointerup", fBelowAll));
+
+  const namesAfter = folderNames().join(",");
+  check("dropping folder0 at the end reorders the folders (" + namesAfter + ")", namesAfter === expected);
+  check("folder marker cleared after drop", !document.querySelector(".folders-list .drop-marker"));
+
+  // --- Overview: Sync now button on remote-source provider rows ---
+  Array.from(document.querySelectorAll("#tab-bar button"))
+    .find((b) => b.textContent === "Overview")
+    ?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+  const overviewRow = document.querySelector(".provider-header");
+  check("overview provider row has a Sync now button", !!overviewRow.querySelector(".sync-now-btn"));
+
+  // --- Provider tab: interval override, full-sync interval, last-synced, Sync now ---
+  Array.from(document.querySelectorAll("#tab-bar button"))
+    .find((b) => b.textContent === "linkding (me)")
+    ?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+  const panel = document.getElementById("tab-panels");
+  const override = panel.querySelector("input.sync-interval-override");
+  check(
+    "linkding tab has a sync-interval override input (empty = global)",
+    !!override && override.value === "" && override.placeholder === "global"
+  );
+  const fullSync = panel.querySelector("input.full-sync-interval");
+  check(
+    "linkding tab has a full-sync interval input (empty = 24h default)",
+    !!fullSync && fullSync.value === "" && fullSync.placeholder === "24"
+  );
+  check(
+    "provider tab shows the last-synced time",
+    Array.from(panel.querySelectorAll(".hint")).some((h) => h.textContent.startsWith("Last synced:"))
+  );
+
+  // Sync now sits in the actions row next to Remove and asks the background
+  // to sync exactly this provider.
+  const sent = [];
+  chrome.runtime.sendMessage = (msg) => { sent.push(msg); return Promise.resolve({ done: true }); };
+  const syncNow = panel.querySelector(".provider-actions .sync-now-btn");
+  check(
+    "provider tab has Sync now next to Remove provider",
+    !!syncNow && !!panel.querySelector(".provider-actions .remove-provider-btn")
+  );
+  syncNow.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+  check(
+    "Sync now sends sync_provider for this provider id",
+    sent.length === 1 && sent[0].type === "sync_provider" && sent[0].providerId === "ld"
+  );
+  check("Sync now disables itself while syncing", syncNow.disabled === true);
 });

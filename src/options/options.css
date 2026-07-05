@@ -135,6 +135,16 @@ section {
   text-decoration: underline;
 }
 
+.provider-actions {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 1.25rem;
+}
+
+.provider-actions .remove-provider-btn {
+  margin-top: 0;
+}
+
 .remove-provider-btn {
   margin-top: 1.25rem;
   background: var(--error-bg);
@@ -291,6 +301,10 @@ button:hover {
   margin-bottom: 0.75rem;
 }
 
+
+.folders-list {
+  position: relative; /* positioning context for the .drop-marker during folder reorder */
+}
 
 .folder-editor {
   background: var(--surface);
