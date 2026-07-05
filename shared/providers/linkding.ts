@@ -12,6 +12,7 @@ export class LinkdingProvider implements BookmarkProvider {
       const response = await this.fetchPage(url);
       for (const b of response.results) {
         const date = toIsoDate(b.date_added);
+        const dateModified = toIsoDate(b.date_modified);
         bookmarks.push({
           id: `${this.config.id}:${b.id}`,
           url: b.url,
@@ -19,6 +20,7 @@ export class LinkdingProvider implements BookmarkProvider {
           tag_names: b.tag_names,
           ...(b.favicon_url ? { favicon_url: b.favicon_url } : {}),
           ...(date ? { date } : {}),
+          ...(dateModified ? { dateModified } : {}),
         });
       }
       url = response.next;

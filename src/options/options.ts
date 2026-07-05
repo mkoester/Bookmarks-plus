@@ -17,6 +17,7 @@ import type {
 } from "@shared/types";
 import { isRuleGroup } from "@shared/types";
 import { parseFolders, parseRuleGroup } from "@shared/validation";
+import { insertionIndexForY } from "@shared/reorder";
 
 // Provider types that may only exist once (no per-instance config to distinguish them).
 const SINGLETON_PROVIDER_TYPES = new Set<ProviderType>(["static", "browser"]);
@@ -52,8 +53,11 @@ async function init(): Promise<void> {
   await loadGrantedOrigins();
 
   // Installed build's version, injected into the manifest from package.json at
-  // build time. Guarded: the screenshot harness's manifest mock has no version.
-  const version = ext.runtime.getManifest().version;
+  // build time. Non-release builds carry the git-decorated version in
+  // version_name (Chromium) or version itself (Firefox); prefer version_name so
+  // both show it. Guarded: the screenshot harness's manifest mock has no version.
+  const manifest = ext.runtime.getManifest() as { version?: string; version_name?: string };
+  const version = manifest.version_name ?? manifest.version;
   if (version) {
     document.getElementById("version")!.textContent = `v${version}`;
   }
@@ -228,6 +232,7 @@ function renderFoldersPanel(): HTMLElement {
     )
   );
   section.appendChild(renderLogicHelp());
+  section.appendChild(renderSortHelp());
 
   folders.forEach((folder, index) => {
     section.appendChild(renderFolderEditor(folder, index));
@@ -813,6 +818,49 @@ function renderLogicHelp(): HTMLElement {
   return details;
 }
 
+// Whether the sort/weight help is expanded; module-level so it survives the
+// full re-render every edit triggers (same pattern as logicHelpOpen).
+let sortHelpOpen = false;
+
+function renderSortHelp(): HTMLElement {
+  const details = document.createElement("details");
+  details.className = "logic-help sort-help";
+  details.open = sortHelpOpen;
+  details.addEventListener("toggle", () => {
+    sortHelpOpen = details.open;
+  });
+
+  const summary = document.createElement("summary");
+  summary.textContent = "How Sort and Weight order a folder's bookmarks";
+  details.appendChild(summary);
+
+  const intro = document.createElement("p");
+  intro.textContent =
+    "\"Latest\" (above, in each folder) picks WHICH bookmarks are shown — the newest N " +
+    "matches. \"Sort\" and \"Weight\" only decide the ORDER of whichever bookmarks were picked:";
+  details.appendChild(intro);
+
+  const laws = document.createElement("ul");
+  [
+    "Weight always wins first: on a condition inside an ANY (OR) group, a higher " +
+      "Weight means bookmarks matching it are shown before ones matching a lower-weighted " +
+      "(or unweighted) condition.",
+    "Sort only breaks ties: among bookmarks with the same Weight (e.g. no weights are " +
+      "set anywhere in the folder, the normal case), Sort decides the order — Newest " +
+      "added, Recently modified, or Alphabetical.",
+    "The Weight field only appears on conditions inside an ANY (OR) group with two or " +
+      "more conditions — that's the only place ranking between alternatives makes sense.",
+    "Leaving Sort as \"Default\" and every Weight empty keeps today's plain order.",
+  ].forEach((tip) => {
+    const li = document.createElement("li");
+    li.textContent = tip;
+    laws.appendChild(li);
+  });
+  details.appendChild(laws);
+
+  return details;
+}
+
 // ---- Folder editors ---------------------------------------------------------
 
 // Per-folder JSON editor state, keyed by folder id. Module-level so it survives
@@ -855,6 +903,35 @@ function renderFolderEditor(folder: Folder, index: number): HTMLElement {
   });
   limitLabel.appendChild(limitInput);
 
+  const sortLabel = document.createElement("label");
+  sortLabel.className = "folder-sort";
+  sortLabel.title =
+    "Secondary display order, applied after any condition weights. Empty = original order.";
+  sortLabel.append("Sort");
+  const sortSelect = document.createElement("select");
+  sortSelect.className = "folder-sort-select";
+  const sortModes: Array<{ value: NonNullable<Folder["sort"]> | ""; label: string }> = [
+    { value: "", label: "Default" },
+    { value: "added", label: "Newest added" },
+    { value: "modified", label: "Recently modified" },
+    { value: "alphabetical", label: "Alphabetical" },
+  ];
+  sortModes.forEach(({ value, label }) => {
+    const opt = document.createElement("option");
+    opt.value = value;
+    opt.textContent = label;
+    if ((folder.sort ?? "") === value) opt.selected = true;
+    sortSelect.appendChild(opt);
+  });
+  sortSelect.addEventListener("change", () => {
+    if (sortSelect.value) {
+      folder.sort = sortSelect.value as Folder["sort"];
+    } else {
+      delete folder.sort;
+    }
+  });
+  sortLabel.appendChild(sortSelect);
+
   const jsonBtn = document.createElement("button");
   jsonBtn.textContent = jsonEdit.has(folder.id) ? "Edit visually" : "Edit as JSON";
   jsonBtn.addEventListener("click", () => {
@@ -875,10 +952,15 @@ function renderFolderEditor(folder: Folder, index: number): HTMLElement {
   });
 
   header.appendChild(nameInput);
-  header.appendChild(limitLabel);
   header.appendChild(jsonBtn);
   header.appendChild(removeBtn);
   div.appendChild(header);
+
+  const settingsRow = document.createElement("div");
+  settingsRow.className = "folder-settings";
+  settingsRow.appendChild(limitLabel);
+  settingsRow.appendChild(sortLabel);
+  div.appendChild(settingsRow);
 
   div.appendChild(
     jsonEdit.has(folder.id)
@@ -914,6 +996,9 @@ function renderGroupEditor(
   });
   matchSelect.addEventListener("change", () => {
     group.match = matchSelect.value as MatchMode;
+    // Whether a weight input is shown on a direct child depends on this
+    // group's match mode, so a mode change needs to re-render its children.
+    renderTabs();
   });
   header.appendChild(matchSelect);
 
@@ -937,11 +1022,25 @@ function renderGroupEditor(
       group.conditions.splice(i, 1);
       renderTabs();
     };
-    conditionsDiv.appendChild(
-      isRuleGroup(node)
-        ? renderGroupEditor(node, false, remove)
-        : renderConditionEditor(node, remove)
-    );
+    // Weight only ranks bookmarks between alternatives in an OR group, so it's
+    // only meaningful for a leaf inside an "any" group that has 2+ conditions
+    // (with a single condition there's nothing to rank it against).
+    const showWeight = group.match === "any" && group.conditions.length >= 2;
+    const child = isRuleGroup(node)
+      ? renderGroupEditor(node, false, remove)
+      : renderConditionEditor(node, showWeight, remove);
+
+    const handle = document.createElement("span");
+    handle.className = "drag-handle";
+    handle.title = "Drag to reorder";
+    handle.textContent = "⠿";
+    const handleParent = isRuleGroup(node) ? child.querySelector(".group-header") : child;
+    handleParent?.insertBefore(handle, handleParent.firstChild);
+
+    child.classList.add("drag-row"); // query hook for the reorder geometry below
+    wireReorderHandle(handle, child, conditionsDiv, group, i);
+
+    conditionsDiv.appendChild(child);
   });
   div.appendChild(conditionsDiv);
 
@@ -968,7 +1067,90 @@ function renderGroupEditor(
   return div;
 }
 
-function renderConditionEditor(condition: RuleCondition, onRemove: () => void): HTMLElement {
+// Pointer-based drag reorder for one rule row (leaf condition or nested group)
+// within its own group's conditions array. Chosen over native HTML5 drag-and-
+// drop because native DnD can't reliably start from a row full of form controls
+// in Firefox, gives no easy live drop indicator, and doesn't work on touch.
+// Reorders siblings only (order has no effect on match semantics — editing
+// convenience). A floating .drop-marker shows where the row would land.
+function wireReorderHandle(
+  handle: HTMLElement,
+  row: HTMLElement,
+  container: HTMLElement,
+  group: RuleGroup,
+  fromIndex: number
+): void {
+  handle.addEventListener("pointerdown", (e) => {
+    if (e.pointerType === "mouse" && e.button !== 0) return;
+    e.preventDefault();
+
+    const rows = Array.from(container.querySelectorAll<HTMLElement>(":scope > .drag-row"));
+    const marker = document.createElement("div");
+    marker.className = "drop-marker";
+    container.appendChild(marker);
+    row.classList.add("dragging");
+    let toIndex = fromIndex;
+
+    const positionMarker = (): void => {
+      const cTop = container.getBoundingClientRect().top;
+      const y =
+        toIndex >= rows.length
+          ? rows[rows.length - 1].getBoundingClientRect().bottom - cTop
+          : rows[toIndex].getBoundingClientRect().top - cTop;
+      marker.style.top = `${y}px`;
+    };
+
+    const onMove = (ev: PointerEvent): void => {
+      const midpoints = rows.map((r) => {
+        const rect = r.getBoundingClientRect();
+        return rect.top + rect.height / 2;
+      });
+      toIndex = insertionIndexForY(ev.clientY, midpoints);
+      positionMarker();
+    };
+
+    const cleanup = (): void => {
+      handle.removeEventListener("pointermove", onMove);
+      handle.removeEventListener("pointerup", onUp);
+      handle.removeEventListener("pointercancel", onCancel);
+      if (handle.hasPointerCapture(e.pointerId)) handle.releasePointerCapture(e.pointerId);
+      marker.remove();
+      row.classList.remove("dragging");
+    };
+
+    const onUp = (): void => {
+      const to = toIndex;
+      cleanup();
+      // toIndex is an "insert before" position; before self or the slot right
+      // after self are both no-ops.
+      if (to === fromIndex || to === fromIndex + 1) return;
+      const [moved] = group.conditions.splice(fromIndex, 1);
+      group.conditions.splice(fromIndex < to ? to - 1 : to, 0, moved);
+      renderTabs();
+    };
+
+    const onCancel = (): void => cleanup();
+
+    // setPointerCapture keeps move/up events coming to the handle even once the
+    // pointer leaves it. Guarded: it can throw in edge cases (e.g. a stale
+    // pointer id), and the listeners below still work without capture.
+    try {
+      handle.setPointerCapture(e.pointerId);
+    } catch {
+      /* capture is an optimisation, not required */
+    }
+    handle.addEventListener("pointermove", onMove);
+    handle.addEventListener("pointerup", onUp);
+    handle.addEventListener("pointercancel", onCancel);
+    positionMarker();
+  });
+}
+
+function renderConditionEditor(
+  condition: RuleCondition,
+  showWeight: boolean,
+  onRemove: () => void
+): HTMLElement {
   const div = document.createElement("div");
   div.className = "condition";
 
@@ -1004,13 +1186,37 @@ function renderConditionEditor(condition: RuleCondition, onRemove: () => void): 
       ? renderProviderValueSelect(condition)
       : renderConditionValueInput(condition);
 
+  div.appendChild(typeSelect);
+  div.appendChild(valueControl);
+
+  if (showWeight) {
+    const weightLabel = document.createElement("label");
+    weightLabel.className = "condition-weight";
+    weightLabel.title =
+      "A bigger number lists bookmarks matching this condition higher up in the folder. Leave empty for no effect on the order.";
+    weightLabel.append("Weight");
+    const weightInput = document.createElement("input");
+    weightInput.type = "number";
+    weightInput.className = "condition-weight-input";
+    weightInput.placeholder = "—";
+    weightInput.value = condition.weight !== undefined ? String(condition.weight) : "";
+    weightInput.addEventListener("input", () => {
+      const n = Number(weightInput.value);
+      if (weightInput.value.trim() !== "" && Number.isFinite(n)) {
+        condition.weight = n;
+      } else {
+        delete condition.weight;
+      }
+    });
+    weightLabel.appendChild(weightInput);
+    div.appendChild(weightLabel);
+  }
+
   const removeBtn = document.createElement("button");
   removeBtn.textContent = "×";
   removeBtn.addEventListener("click", onRemove);
-
-  div.appendChild(typeSelect);
-  div.appendChild(valueControl);
   div.appendChild(removeBtn);
+
   return div;
 }
 

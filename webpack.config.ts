@@ -1,5 +1,6 @@
 import path from "path";
 import fs from "fs";
+import { execFileSync } from "child_process";
 import { fileURLToPath } from "url";
 import CopyPlugin from "copy-webpack-plugin";
 import { merge } from "webpack-merge";
@@ -30,6 +31,28 @@ const TARGET_MANIFESTS: Record<string, string[]> = {
 const pkg = JSON.parse(
   fs.readFileSync(path.resolve(__dirname, "package.json"), "utf-8")
 );
+
+// Git-based build versioning (same rules as thunderbird_send_as's build.sh):
+// clean main → 1.1.3 · other branch → 1.1.3-<hash> · dirty tree → …-SNAPSHOT.
+function decoratedVersion(base: string): string {
+  const git = (...args: string[]) =>
+    execFileSync("git", args, { cwd: __dirname, encoding: "utf-8" }).trim();
+  try {
+    git("rev-parse", "--git-dir");
+  } catch {
+    console.warn("Not in a git repository — using base version only");
+    return base;
+  }
+  let version = base;
+  const branch = git("rev-parse", "--abbrev-ref", "HEAD");
+  if (branch !== "main") version += `-${git("rev-parse", "--short", "HEAD")}`;
+  try {
+    git("diff-index", "--quiet", "HEAD", "--");
+  } catch {
+    version += "-SNAPSHOT";
+  }
+  return version;
+}
 
 // Deep merge: objects are merged recursively; arrays are unioned (deduplicated).
 function deepMergeManifests(base: any, override: any): any {
@@ -95,7 +118,18 @@ export default (env: { target?: string; browser?: string; mode?: string }): Conf
     (acc, file) => deepMergeManifests(acc, loadJson(file)),
     {}
   );
+  // `version` stays the store-safe plain number (stores accept only dot-separated
+  // integers). The git-decorated build version goes where each browser allows it:
+  // Chromium in `version_name` (display-only string), Firefox in `version` itself —
+  // Firefox has no version_name (Bugzilla #1380219) and since FF 108 merely warns
+  // on a non-standard version. Store uploads are always clean-main builds, where
+  // decorated == plain, so nothing non-standard can reach AMO/CWS.
   mergedManifest.version = pkg.version;
+  const decorated = decoratedVersion(pkg.version);
+  if (decorated !== pkg.version) {
+    if (target === "firefox") mergedManifest.version = decorated;
+    else mergedManifest.version_name = decorated;
+  }
 
   const outDir = path.resolve(__dirname, `dist/${target}`);
 

@@ -2,12 +2,25 @@
 
 Working notes for publishing **Bookmarks+** to the Firefox Add-ons store (AMO) and
 the Chrome Web Store (CWS). Pairs with `CLAUDE.md` (architecture) and `PRIVACY.md`
-(privacy policy). Last worked: 2026-07-04.
+(privacy policy). Last worked: 2026-07-05.
 
 ## Current status
 
-- **Version:** 1.1.3 (single source of truth = `package.json`; injected into each
-  manifest at build). 1.1.3 = RSS/Atom support, dates & limits: the JSON Feed
+- **Version:** 1.1.4 (single source of truth = `package.json`; injected into each
+  manifest at build). 1.1.4 = folder display ordering + reordering + open
+  affordances: per-folder **Sort** (newest added / recently modified /
+  alphabetical) and per-condition **Weight** on OR (ANY) rules with 2+
+  conditions (weight ranks matches, primary; sort is the tiebreak);
+  `Bookmark.dateModified` (linkding `date_modified`) added to drive "recently
+  modified". **Drag to reorder** rule conditions/groups within a group
+  (pointer-based, live drop marker, touch-friendly). **"Open all in background
+  tabs"** button on folders + **"open in background"** button per bookmark
+  (works on trackpads/touch, supplements the existing middle-click). Options
+  page now **opens in its own tab** (`open_in_tab: true`, wider — the rule
+  editor needs the room). Internal only: pointer-based reorder replaced an
+  unreliable native-DnD attempt, and a `pnpm verify:ui` headless UI regression
+  harness was added. **No new permissions, no new dependencies.**
+  1.1.3 = RSS/Atom support, dates & limits: the JSON Feed
   provider became a unified **"Web feed"** provider (config type `feed`;
   `jsonfeed` kept as legacy alias) that auto-detects RSS 2.0/0.9x, RSS 1.0
   (RDF), Atom 1.0, or JSON Feed; categories become tags; XML-prolog encoding
@@ -34,13 +47,16 @@ the Chrome Web Store (CWS). Pairs with `CLAUDE.md` (architecture) and `PRIVACY.m
   collapsed boolean-logic help (`<details>`) on the Folders tab. Old flat
   rules load unchanged (no migration). 1.0.2 was pre-submission cleanup: shared
   folder-rendering helper (`shared/folderList.ts`), unit tests wired into
-  `pnpm build`, doc fixes. **1.1.0 is the last published version** (AMO:
-  https://addons.mozilla.org/en-US/firefox/addon/bookmarks-plus/); the 1.1.3
-  upload therefore ships everything from 1.1.1–1.1.3 — see "Version notes for
-  the 1.1.3 upload" below.
-- **Code state:** release-ready pending a manual re-test in both browsers (the
-  render code was refactored). `pnpm build` (type-check + tests + 3 targets)
-  clean. AMO `web-ext lint`: **0 errors, 3 benign warnings** (see below).
+  `pnpm build`, doc fixes. **1.1.3 is the last published version** (AMO:
+  https://addons.mozilla.org/en-US/firefox/addon/bookmarks-plus/ — Approved,
+  Listed Version 1.1.3, updated 2026-07-04); the 1.1.4 upload therefore ships
+  only the 1.1.4 changes above — see "Version notes for the 1.1.4 upload" below.
+- **Code state:** `pnpm build` (type-check + tests + 3 targets) clean; `pnpm
+  verify:ui` (headless UI regression check) green. Before upload: **re-run
+  `web-ext lint`** (was 0 errors / 3 benign warnings on 1.1.3 — reconfirm after
+  the 1.1.4 CSS/manifest changes), and **manually confirm the drag-reorder in a
+  real Firefox** (its pointer-drag can't be validated by the headless harness —
+  see the drag note in `CLAUDE.md`).
 - **NOT yet done:** git commit (user does this themselves), and the actual store
   uploads.
 
@@ -51,6 +67,11 @@ pnpm package      # builds all 3 targets (production, NOT minified, no source ma
                   # + zips them to web-store/bookmarks-plus-<target>-<version>.zip
 pnpm screenshots  # regenerates web-store/screenshots/*.png (1280x800)
 ```
+
+**Build from a clean `main` checkout.** Off-main or dirty builds get a git-decorated
+version (`1.1.3-<hash>`, `…-SNAPSHOT`) baked into the zip filename *and* the manifest
+(Chromium: `version_name`; Firefox: `version` itself) — instantly recognizable as
+not-for-upload. Clean main produces the plain store-safe version everywhere.
 
 `web-store/` is gitignored — artifacts are regenerated, not committed.
 
@@ -103,6 +124,11 @@ Three upload artifacts → **three listings across two stores**:
       stores (sidebar caption says "sidebar / side panel"). See "Firefox question"
       note: only real divergence is favicons (we use deterministic letter tiles, so
       it's a fair representation of both).
+- [ ] **After the uploads, on `develop` only:** bump the patch version in
+      `package.json` — `develop` then carries the next release's version, while
+      `main`'s version only changes when a release is merged into it;
+      intermediate builds stay identifiable via the git-decorated version
+      (no bump-per-test-build).
 
 ### AMO (Firefox)
 - [ ] Upload `bookmarks-plus-firefox-<v>.zip`.
@@ -117,6 +143,21 @@ Three upload artifacts → **three listings across two stores**:
       permissions; declare no data sale/transfer.
 - [ ] $5 one-time developer registration (if not already).
 - [ ] Paste the reviewer note (below).
+
+## Version notes for the 1.1.4 upload (everything since published 1.1.3)
+
+Paste into AMO "Release notes" (reuse for any CWS listing description update —
+CWS has no changelog field). No new permissions and no new dependencies, so the
+review surface is unchanged from 1.1.3.
+
+> - **Sort each folder** — newest added, recently modified, or alphabetical.
+> - **Weight your OR-rules** — when a folder matches on any of several
+>   conditions, give some more weight so their bookmarks rank higher.
+> - **Drag to reorder** the conditions in a folder's rules.
+> - **Open a whole folder in background tabs** with one button, or open a single
+>   bookmark in the background — no longer just middle-click, so it works on
+>   trackpads and touch too.
+> - **Settings now open in their own tab**, with more room for the rule editor.
 
 ## Version notes for the 1.1.3 upload (everything since published 1.1.0)
 
@@ -146,7 +187,7 @@ update — CWS has no changelog field):
 
 > **Bookmarks+ turns your bookmarks into a fast, folder-based launcher — in your sidebar, your toolbar popup, and (optionally) your New Tab page.**
 >
-> Define folders with simple rules ("tag is *reading*", "URL contains *github*", "comes from *this source*", title contains…) and Bookmarks+ fills them automatically. Combine and nest rules with AND/OR/NOT; a bookmark can live in several folders at once. Optionally show only the latest N items per folder.
+> Define folders with simple rules ("tag is *reading*", "URL contains *github*", "comes from *this source*", title contains…) and Bookmarks+ fills them automatically. Combine and nest rules with AND/OR/NOT; a bookmark can live in several folders at once. Optionally show only the latest N items per folder, and sort each folder by date or name.
 >
 > **Sources you can mix and match:**
 > • **Linkding** — sync your self-hosted Linkding instance via its REST API (token auth)
@@ -155,7 +196,7 @@ update — CWS has no changelog field):
 > • **JSON** — paste your own list
 > • **Demo data** — try it instantly, no setup
 >
-> Background sync keeps everything current on a timer you control. Middle-click a folder to open everything in it at once. Per-site favicons with clean letter-tile fallbacks.
+> Background sync keeps everything current on a timer you control. Open a whole folder in background tabs with one button (or middle-click), or open a single bookmark in the background. Per-site favicons with clean letter-tile fallbacks.
 >
 > **Privacy:** your data stays in your browser. The only network requests are to the Linkding instance and the feeds *you* configure — host access is requested per origin and nothing else.
 
@@ -163,7 +204,7 @@ update — CWS has no changelog field):
 
 > **Quick access to your bookmarks from a toolbar popup and a side panel — without touching your New Tab page.**
 >
-> Bookmarks+ organizes your bookmarks into folders defined by rules (by tag, URL, title, or source, nested with AND/OR/NOT; optional "latest N" per folder). Open the popup from the toolbar, or press **Ctrl+Shift+S** for the side panel.
+> Bookmarks+ organizes your bookmarks into folders defined by rules (by tag, URL, title, or source, nested with AND/OR/NOT; optional "latest N" per folder, sortable by date or name). Open the popup from the toolbar, or press **Ctrl+Shift+S** for the side panel. Open a whole folder in background tabs with one button.
 >
 > **Sources:** Linkding (self-hosted, REST API token auth), web feeds (RSS / Atom / JSON Feed as a live folder of a site's current links), your browser's own bookmarks (folder names become tags), pasted JSON, or built-in demo data — mix as many as you like. Background sync on a timer you set.
 >

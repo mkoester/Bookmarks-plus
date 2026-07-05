@@ -11,6 +11,8 @@ export interface BookmarkItemOptions {
   faviconSize: number;
   /** Left-click handler. Omit for native anchor navigation in a new tab (new-tab page). */
   onOpen?: (bookmark: Bookmark) => void;
+  /** Opens this bookmark in a background tab without navigating/closing the current view. */
+  onOpenBackground?: (bookmark: Bookmark) => void;
 }
 
 export function renderBookmarkItem(bookmark: Bookmark, opts: BookmarkItemOptions): HTMLElement {
@@ -45,6 +47,24 @@ export function renderBookmarkItem(bookmark: Bookmark, opts: BookmarkItemOptions
   a.appendChild(renderFavicon(bookmark, opts.faviconSize));
   a.appendChild(span);
   li.appendChild(a);
+
+  // Explicit affordance for opening in a background tab — middle-click covers
+  // this for desktop mouse users, but has no equivalent on trackpads or touch.
+  if (opts.onOpenBackground && safe) {
+    const bgBtn = document.createElement("button");
+    bgBtn.type = "button";
+    bgBtn.className = "open-bg-btn";
+    bgBtn.title = "Open in background tab";
+    bgBtn.setAttribute("aria-label", `Open ${bookmark.title} in a background tab`);
+    bgBtn.textContent = "⇱";
+    bgBtn.addEventListener("click", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      opts.onOpenBackground!(bookmark);
+    });
+    li.appendChild(bgBtn);
+  }
+
   return li;
 }
 
@@ -62,8 +82,30 @@ export function renderFolderDetails(
   details.open = true;
 
   const summary = document.createElement("summary");
-  summary.textContent = folder.name;
+  const nameSpan = document.createElement("span");
+  nameSpan.className = "folder-name";
+  nameSpan.textContent = folder.name;
+  summary.appendChild(nameSpan);
+
   if (opts.onOpenAll) {
+    // Explicit, always-reachable affordance — middle-click below still works
+    // as a bonus shortcut for desktop mouse users, but doesn't exist on
+    // trackpads or touch.
+    const openAllBtn = document.createElement("button");
+    openAllBtn.type = "button";
+    openAllBtn.className = "open-all-btn";
+    openAllBtn.title = "Open all in background tabs";
+    openAllBtn.setAttribute("aria-label", `Open all bookmarks in ${folder.name}`);
+    openAllBtn.textContent = "⇱";
+    openAllBtn.addEventListener("click", (e) => {
+      // A click on a child of <summary> otherwise triggers the browser's
+      // native <details> toggle — stop that before invoking the callback.
+      e.preventDefault();
+      e.stopPropagation();
+      opts.onOpenAll!(safeFolderBookmarks(folder, bookmarkMap));
+    });
+    summary.appendChild(openAllBtn);
+
     summary.addEventListener("mousedown", (e) => {
       if (e.button !== 1) return;
       e.preventDefault();

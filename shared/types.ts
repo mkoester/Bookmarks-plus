@@ -10,6 +10,10 @@ export interface Bookmark {
   // knows it (linkding date_added, browser dateAdded, feed publish dates).
   // Basis for the per-folder "latest N" limit.
   date?: string;
+  // ISO timestamp of linkding's date_modified. Only linkding populates this;
+  // other providers leave it undefined. Basis for the "modified" sort mode
+  // (falls back to `date` when absent).
+  dateModified?: string;
 }
 
 export type BookmarkMap = Record<string, Bookmark>;
@@ -22,6 +26,11 @@ export type MatchMode = "all" | "any" | "none";
 export interface RuleCondition {
   type: ConditionType;
   value: string;
+  // Only meaningful on a condition that is a direct child of an "any" (OR)
+  // group; used by matchWeight() to bias folder display order. Unset/absent
+  // conditions default to 0, so a folder with no weights configured never
+  // has its order affected.
+  weight?: number;
 }
 
 export interface RuleGroup {
@@ -45,6 +54,9 @@ export interface Folder {
   rules: FolderRules;
   // Show only the newest N matches (by Bookmark.date, undated last). Absent = all.
   limit?: number;
+  // Secondary display-order tiebreak, applied after matchWeight() scoring.
+  // Absent = today's behavior (no explicit ordering beyond weight ties).
+  sort?: "added" | "modified" | "alphabetical";
   bookmark_ids: string[]; // precomputed at sync time
 }
 

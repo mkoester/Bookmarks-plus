@@ -96,3 +96,27 @@
   margin-top: 0.3rem;
   color: var(--fg-muted);
 }
+
+/* Small icon buttons for "open all" (folder summary) / "open in background"
+   (per bookmark row). Always visible — no hover-only state, so they're
+   reachable on touch too. */
+.open-all-btn,
+.open-bg-btn {
+  background: transparent;
+  border: none;
+  color: var(--fg-muted);
+  cursor: pointer;
+  padding: 0.1rem 0.3rem;
+  border-radius: 4px;
+  font-size: 0.85em;
+  line-height: 1;
+  flex: 0 0 auto;
+}
+
+.open-all-btn:hover,
+.open-bg-btn:hover,
+.open-all-btn:focus-visible,
+.open-bg-btn:focus-visible {
+  color: var(--fg-strong);
+  background: var(--hover-bg);
+}
