@@ -9,7 +9,10 @@ body {
   background: var(--bg);
   color: var(--fg);
   padding: 2rem;
-  max-width: 640px;
+  /* Wider than the old 640px cap: options now open in their own tab
+     (options_ui.open_in_tab), and the folder rule editor's condition rows
+     (type + value + weight + remove on one line) need the room. */
+  max-width: 960px;
 }
 
 .header {
@@ -306,9 +309,18 @@ button:hover {
 
 .folder-header input {
   flex: 1;
+  min-width: 0;
 }
 
-.folder-header label.folder-limit {
+.folder-settings {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin-bottom: 0.5rem;
+}
+
+.folder-settings label.folder-limit,
+.folder-settings label.folder-sort {
   flex: 0 0 auto;
   flex-direction: row;
   align-items: center;
@@ -317,7 +329,7 @@ button:hover {
   font-size: 0.85rem;
 }
 
-.folder-header input.folder-limit-input {
+.folder-settings input.folder-limit-input {
   flex: 0 0 4.5rem;
 }
 
@@ -326,22 +338,68 @@ button:hover {
   flex-direction: column;
   gap: 0.35rem;
   margin-bottom: 0.5rem;
+  position: relative; /* positioning context for the .drop-marker during reorder */
+}
+
+/* Floating insertion indicator shown while dragging a rule row by its handle. */
+.drop-marker {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 2px;
+  margin-top: -1px;
+  background: var(--link);
+  border-radius: 1px;
+  pointer-events: none;
 }
 
 .condition {
   display: flex;
+  flex-wrap: wrap;
   gap: 0.5rem;
   align-items: center;
 }
 
 .condition input {
   flex: 1;
+  min-width: 4rem;
 }
 
 .condition button {
   padding: 0.25rem 0.5rem;
   background: var(--error-bg);
   border-color: var(--error-border);
+}
+
+.condition label.condition-weight {
+  flex: 0 0 auto;
+  flex-direction: row;
+  align-items: center;
+  gap: 0.35rem;
+  margin-bottom: 0;
+  font-size: 0.85rem;
+}
+
+.condition input.condition-weight-input {
+  flex: 0 0 4rem;
+  min-width: 0;
+}
+
+.drag-handle {
+  cursor: grab;
+  flex: 0 0 auto;
+  padding: 0 0.25rem;
+  color: var(--fg-muted);
+  user-select: none;
+  touch-action: none; /* let a touch drag on the handle reorder, not scroll */
+}
+
+.drag-handle:active {
+  cursor: grabbing;
+}
+
+.dragging {
+  opacity: 0.5;
 }
 
 /* ---- Boolean-logic help ---- */
@@ -370,6 +428,14 @@ button:hover {
   font-family: monospace;
   margin-left: 1rem;
   margin-bottom: 0.2rem;
+}
+
+/* Prose tips (unlike the boolean-logic notation above) read better in the
+   regular font. */
+.sort-help li {
+  font-family: inherit;
+  margin-left: 1rem;
+  margin-bottom: 0.35rem;
 }
 
 /* ---- Rule groups (nested) ---- */

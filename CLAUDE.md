@@ -8,7 +8,8 @@
 
 - **Package manager: pnpm** (not npm — `package-lock.json` is gitignored)
 - `pnpm type-check` — `tsc --noEmit`, should be clean
-- `pnpm test` — unit tests in `tests/*.test.ts` via `node --test` with the `tsx` loader (no framework). They cover the pure `shared/` modules (`url`, `validation`, `bookmarks`) and must stay free of DOM/`ext` imports (`shared/browser.ts` throws outside an extension context).
+- `pnpm test` — unit tests in `tests/*.test.ts` via `node --test` with the `tsx` loader (no framework). They cover the pure `shared/` modules (`url`, `validation`, `bookmarks`, `reorder`) and must stay free of DOM/`ext` imports (`shared/browser.ts` throws outside an extension context).
+- `pnpm verify:ui` — headless UI regression check the unit tests can't reach (they need a real DOM + the built bundle). `scripts/verify-ui.mjs` copies `dist/chrome`, injects `screenshot-harness.js` (mock `chrome.*`) + `scripts/ui-verify/lib.js` + a per-surface driver (`scripts/ui-verify/{options,popup,sidebar}.js`), runs each page under **chromium --dump-dom**, and greps a `<pre id="verify-result">` of PASS/FAIL lines; exits non-zero on failure. Asserts: folders render, the open-all / open-in-background buttons exist, and the pointer-based rule reorder actually reorders + shows its `.drop-marker`. Needs `chromium` on PATH; no npm install. **Caveat:** synthetic events validate handler logic + DOM (and drive the pointer-drag handlers genuinely end-to-end), but can't validate true *native* browser gestures — see the drag-reorder note under "Folder rules". Add a driver check whenever you add UI a unit test can't cover.
 - `pnpm build` — runs **type-check + tests first**, then builds all three targets via webpack, **production mode** (tree-shaken, no source maps, **not minified** — `optimization.minimize: false`, because AMO advises against minification and it has no perf benefit for local extension code). `dev:*`/watch builds stay development with inline source maps. Mode is `--env mode=production` (see `isProd` in `webpack.config.ts`).
 - `pnpm package` — builds, then zips each `dist/<target>/` into `web-store/bookmarks-plus-<target>-<version>.zip` for store upload (needs the `zip` CLI). `web-store/` is gitignored. The `<version>` in the filename is read back from the built manifest (`version_name ?? version`), so it always matches the zip's content.
 - `pnpm screenshots` — generates repeatable 1280×800 store screenshots to `web-store/screenshots/`. `scripts/screenshots.mjs` copies `dist/chrome`, injects `scripts/screenshot-harness.js` (mocks `chrome.*` with demo data so the real page bundles render headless), captures each surface with system **chromium --headless**, and frames the small ones with **ImageMagick** (caption font resolved via `fc-match`). Edit the `DEMO` data in the harness or the `SHOTS` list to change content. Needs `chromium` + `magick` on PATH; no npm install.
@@ -35,8 +36,16 @@
 
 **Bookmark dates & "latest N" limits (since 1.1.3)**
 - `Bookmark.date?: string` (ISO) — when the provider knows it: linkding `date_added`, browser `dateAdded`, RSS `pubDate`/RDF `dc:date`/Atom `published|updated`, JSON Feed `date_published|date_modified`, JSON-paste optional `date`. Normalised via `toIsoDate()` (validation.ts); unparseable → absent, never garbage.
-- `Folder.limit?: number` — show only the newest N matches. Applied in `computeFolderMembership` via `latestN()` (bookmarks.ts): sort by date desc, undated last in input order (= feed order, conventionally newest-first). Editor: the small "Latest N" number input in the folder header; validated by `parseFolders` (positive integer).
+- `Bookmark.dateModified?: string` (ISO) — linkding's `date_modified` only (`shared/providers/linkding.ts`); every other provider leaves it undefined. Basis for the folder `sort: "modified"` mode (falls back to `date` when absent).
+- `Folder.limit?: number` — show only the newest N matches. Applied in `computeFolderMembership` via `latestN()` (bookmarks.ts): sort by date desc, undated last in input order (= feed order, conventionally newest-first). Editor: the small "Latest N" number input in the folder header; validated by `parseFolders` (positive integer). This is a *selection* step (which N to include) — separate from and applied before the display-ordering step below.
 - `FeedProviderConfig.maxItems?: number` — per-feed cap applied at sync time (also `latestN`), for feeds that ship 150+ items. Empty = keep all.
+
+**Folder display ordering — weight + sort (since 2026-07-05)**
+- `RuleCondition.weight?: number` — only meaningful on a condition that is a direct child of an `"any"` (OR) group **with 2+ conditions** (ranking between OR alternatives); the options editor only shows the weight `<input>` there (`renderGroupEditor` passes `renderConditionEditor` a `showWeight = group.match === "any" && group.conditions.length >= 2` boolean — a lone OR condition has nothing to rank against, so no field). `matchWeight(bookmark, node)` (bookmarks.ts) scores a bookmark against a rule (sub)tree: leaf = `matched ? (weight ?? 0) : 0`; `"any"` group = MAX over matched children; `"all"` group = SUM over children; `"none"` group = always 0. Unweighted conditions default to `0`, so a folder with no weights configured scores everyone `0` — no separate "has any weight" flag needed, it just falls through.
+- `Folder.sort?: "added" | "modified" | "alphabetical"` — secondary tiebreak, only consulted when two bookmarks tie on weight (which is always, for folders with no weights configured). Absent = original/stable order.
+- `sortForDisplay(bookmarks, folder)` (bookmarks.ts) applies weight-desc-then-sort-mode; wired into `computeFolderMembership` **after** the `limit`-based selection step, so `bookmark_ids` pipeline is: rule filter → `latestN` selection (if `limit` set) → `sortForDisplay` (display order). Runs once per sync in the background worker; popup/sidebar/newtab all just read the already-ordered `bookmark_ids`.
+- `parseRuleNode`/`parseFolders` (validation.ts) accept both fields as optional; old stored data and JSON import/export round-trip unchanged with no migration.
+- **UI**: the folder-header row only holds the name input + "Edit as JSON"/"Remove" buttons — `Latest`/`Sort` moved to their own `.folder-settings` row underneath (originally crammed into the header alongside everything else, which overflowed the header and squeezed the name field once `Sort` was added; two rows is the fix, not a wrapping hack). The weight input is wrapped in a visible `<label>Weight<input>…` (same pattern as `Latest`/`Sort`), not a bare `placeholder` — a placeholder disappears the moment a value is typed, leaving the number meaningless. A collapsible `renderSortHelp()` (styled like the existing boolean-logic help, once per Folders panel, not per folder) explains in prose that Weight always wins first and Sort only breaks ties — this needs spelling out in the UI itself, a tooltip alone isn't discoverable enough.
 
 **Provider system**
 - Each bookmark source is a `BookmarkProvider` (interface in `shared/types.ts`): `sync(): Promise<Bookmark[]>`
@@ -90,6 +99,13 @@ Groups nest arbitrarily → `A AND (B OR C)` etc. The `provider` condition's val
 
 Empty groups never match — deliberately **not** vacuous truth for `all`, so a half-built group can't silently match everything. **No migration needed**: the old flat `{match: "all"|"any", conditions: RuleCondition[]}` is structurally valid in the new format (json-rules-engine-style; JsonLogic was considered and rejected as too generic/verbose). Rules are validated by `parseRuleGroup`/`parseFolders` in `shared/validation.ts` (used by the options JSON editors, folder import, and defensively by `getFolders`). A bookmark can appear in multiple folders. No "uncategorized" folder.
 
+**Reordering rule conditions/groups (pointer-based drag, since 2026-07-05)**: `options.ts`'s `renderGroupEditor` makes each direct child reorderable by dragging its `.drag-handle` (⠿), scoped to **siblings within one group's own `conditions` array only** (no cross-group moves) — order has zero effect on match semantics (AND/OR/NOT don't care), it's purely editing convenience. `RuleCondition`/`RuleGroup` have no id field — reordering is index-based (splice/re-insert then `renderTabs()`, same as remove). **This uses Pointer Events, NOT native HTML5 drag-and-drop** (`wireReorderHandle`): `pointerdown` on the handle → `setPointerCapture` (guarded in try/catch — can throw on a stale pointer id) → `pointermove` computes the insert index from the pointer Y vs the rows' live `getBoundingClientRect` midpoints (pure helper `insertionIndexForY` in `shared/reorder.ts`, unit-tested) and positions a floating `.drop-marker` line → `pointerup` reorders (no-op if dropping before self or the slot right after) then `renderTabs()`. Rows carry a `.drag-row` class as the geometry query hook; `.conditions` is `position: relative` so the absolute marker sits in it; `.drag-handle` has `touch-action: none` so a touch drag reorders instead of scrolling. **⚠ Do NOT rewrite this as native HTML5 DnD** — it was tried twice (draggable on the row, then on the handle) and both silently failed in real Firefox: native DnD can't reliably *initiate* from a row full of form controls, gives no easy live drop marker, and doesn't work on touch. Both also *passed a headless synthetic-`DragEvent` test while broken*, because synthetic DragEvents bypass real drag initiation. The pointer-based version's logic (index math + reorder) IS exercised end-to-end by `pnpm verify:ui`.
+
+**Open-all / open-in-background affordances (since 2026-07-05)**
+- Folder middle-click ("open all in background tabs") was **mouse-only** — no equivalent on trackpads (no middle button) or touch. `renderFolderDetails` (`shared/folderList.ts`) now also renders an always-visible `.open-all-btn` icon button inside `<summary>` that calls the same `onOpenAll` callback; the `mousedown`/`button===1` middle-click handler is kept alongside it (both call the same callback — not a replacement). The button's click handler must `preventDefault()`/`stopPropagation()` first, since a click on any child of `<summary>` otherwise triggers the browser's native `<details>` toggle.
+- Same gap existed per-bookmark (native anchor middle-click/auxclick). `renderBookmarkItem` now accepts an optional `onOpenBackground?: (bookmark) => void`; when provided, a small trailing `.open-bg-btn` renders per row. Wired in popup.ts (`active:false`, deliberately **no** `window.close()` — lets the user open several before closing themselves, unlike `onOpen`) and sidebar.ts (`active:false`, same shape as its existing `onOpenAll`). **Not** wired in newtab.ts — its bookmarks are plain native anchors with no `onOpen` specifically so native middle-click/ctrl-click keep working unmodified; there's nothing broken to fix there, and newtab doesn't use `renderFolderDetails` so it has no folder-level open-all either (out of scope, not requested).
+- `summary` gained `display:flex; justify-content:space-between` (needs a `.folder-name` span sibling now, can't be a bare `textContent` anymore) and `li` gained `display:flex` (the new button is a sibling of `a`, not nested in it) — mirrored 1:1 across popup.css/sidebar.css since those files' relevant rules were already near-duplicates. Icon-button look lives in `tokens.css` (`.open-all-btn`/`.open-bg-btn`, uses `--fg-muted`/`--hover-bg` tokens) so it's shared and themes correctly.
+
 **Browser API abstraction**
 - `shared/browser.ts` exports a single `ext` object — `browser` in Firefox, `chrome` in Chrome
 - All code imports from there; no direct `browser.*` or `chrome.*` calls
@@ -135,6 +151,8 @@ shared/
                         for folder rules (JSON editor, import, defensive getFolders)
   rss.ts              — parseXmlFeed() (RSS 2.0/0.9x, RDF, Atom → Bookmarks via
                         fast-xml-parser) + decodeFeedBytes() (XML-prolog encoding)
+  reorder.ts          — insertionIndexForY() pure geometry helper for the
+                        options page's pointer-based rule reordering (unit-tested)
   providers/
     index.ts          — createProvider(config) factory
     static.ts         — StaticProvider
@@ -154,16 +172,23 @@ src/
   newtab/newtab.ts           — <section>/<h2> folder layout; bookmarks via shared
                                renderBookmarkItem (native anchors); storage change listener
   newtab/newtab.html/css
-  popup/popup.ts             — shared renderFolderDetails; left-click/middle-click open
-                               new tabs and close the popup
+  popup/popup.ts             — shared renderFolderDetails; left-click opens new tabs and
+                               closes the popup; onOpenBackground opens a background tab
+                               without closing (lets the user open several); onOpenAll
+                               (button or middle-click) opens all + closes
   popup/popup.html/css
   sidebar/sidebar.ts         — shared renderFolderDetails; left-click navigates current
-                               tab, middle-click folder opens all in background tabs;
+                               tab; onOpenBackground/onOpenAll (button or middle-click)
+                               both open background tabs, sidebar never closes;
                                Chromium side-panel toggle port
   sidebar/sidebar.html/css
   options/options.ts         — provider management UI + recursive folder/rule editor,
                                per-folder JSON editor, folder export/import (replace-all,
-                               staged in memory until Save), collapsed boolean-logic help
+                               staged in memory until Save), collapsed boolean-logic +
+                               sort/weight help. Opens in its OWN TAB
+                               (manifest options_ui.open_in_tab:true, since 2026-07-05) —
+                               Firefox otherwise embeds it in a cramped ~630px about:addons
+                               panel; the folder rule rows need the room. body max-width 960px.
   options/options.html/css
   onboarding/onboarding.ts   — first-run welcome page, runtime-tailored per browser/target
   onboarding/onboarding.html/css
@@ -203,8 +228,8 @@ Pagination: follows `next` links until exhausted (100 results per page).
 - [x] ~~Error state UI when sync fails~~ — sync error banner (see Architecture)
 
 **Nice to have**
-- [ ] Folder ordering (drag to reorder)
-- [ ] Bookmark ordering within folders
+- [ ] Folder ordering (drag to reorder) — note: rule *condition* reordering within a folder is done (see "Reordering rule conditions/groups" above); this item is about reordering the folders themselves in the list, still open
+- [x] ~~Bookmark ordering within folders~~ — `Folder.sort` + per-condition `weight` (see "Folder display ordering" above)
 - [ ] Search/filter within the new tab page
 - [ ] "Open in Linkding" context on individual bookmarks
 - [ ] Error state UI when sync fails

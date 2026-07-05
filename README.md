@@ -9,7 +9,14 @@ Browser extension for [Linkding](https://github.com/sissbruecker/linkding) — d
 - Folder rules: match bookmarks by tag, URL, title, or source provider with
   nested ALL/ANY/NONE groups (e.g. `A AND (B OR C)`, or "everything except…");
   optional per-folder "latest N" limit; rules editable as JSON per folder, and
-  all folder definitions exportable/importable as JSON
+  all folder definitions exportable/importable as JSON. Reorder the conditions
+  in a rule by dragging
+- Per-folder display order: sort by newest-added, recently-modified, or
+  alphabetical; give the conditions of an OR (ANY) rule a weight to rank their
+  matches higher
+- Open every bookmark in a folder in background tabs with one button, or open a
+  single bookmark in the background — works on trackpads and touch, not just
+  middle-click
 - Background sync on timer + on New Tab open (full sync each time; incremental
   sync via Linkding's `modified_since` is a possible future optimisation)
 - Import your browser's own bookmarks (folder names become tags)

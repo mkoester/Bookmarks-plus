@@ -7,6 +7,8 @@ import {
   computeFolderMembership,
   latestN,
   matchesNode,
+  matchWeight,
+  sortForDisplay,
   safeFolderBookmarks,
 } from "../shared/bookmarks";
 import type { Bookmark, Folder, RuleGroup } from "../shared/types";
@@ -277,4 +279,154 @@ test("safeFolderBookmarks drops missing ids and unsafe URLs", () => {
   ]);
   const result = safeFolderBookmarks(folder({ bookmark_ids: ["a", "b", "gone"] }), map);
   assert.deepEqual(result.map((b) => b.id), ["a"]);
+});
+
+// ---- matchWeight -------------------------------------------------------------
+
+test("matchWeight: leaf contributes its weight only when matched", () => {
+  const cond = { type: "tag" as const, value: "dev", weight: 5 };
+  assert.equal(matchWeight(bm("a", { tag_names: ["dev"] }), cond), 5);
+  assert.equal(matchWeight(bm("b", { tag_names: ["news"] }), cond), 0);
+});
+
+test("matchWeight: unweighted leaf defaults to 0", () => {
+  const cond = { type: "tag" as const, value: "dev" };
+  assert.equal(matchWeight(bm("a", { tag_names: ["dev"] }), cond), 0);
+});
+
+test("matchWeight: 'any' group takes MAX of matched children, not sum", () => {
+  const rules: RuleGroup = {
+    match: "any",
+    conditions: [
+      { type: "tag", value: "low", weight: 1 },
+      { type: "tag", value: "high", weight: 10 },
+      { type: "tag", value: "mid", weight: 5 },
+    ],
+  };
+  // matches both "high" (10) and "mid" (5) -> max, not 15
+  assert.equal(matchWeight(bm("a", { tag_names: ["high", "mid"] }), rules), 10);
+  assert.equal(matchWeight(bm("b", { tag_names: ["low"] }), rules), 1);
+  assert.equal(matchWeight(bm("c", { tag_names: ["nope"] }), rules), 0);
+});
+
+test("matchWeight: 'all' group sums children's weights", () => {
+  const rules: RuleGroup = {
+    match: "all",
+    conditions: [
+      { type: "tag", value: "dev", weight: 3 },
+      { type: "tag", value: "rust", weight: 4 },
+    ],
+  };
+  assert.equal(matchWeight(bm("a", { tag_names: ["dev", "rust"] }), rules), 7);
+});
+
+test("matchWeight: 'none' group always contributes 0", () => {
+  const rules: RuleGroup = {
+    match: "none",
+    conditions: [{ type: "tag", value: "archived", weight: 99 }],
+  };
+  assert.equal(matchWeight(bm("a"), rules), 0);
+});
+
+test("matchWeight: nested composition — all[any[w1,w5], all[w2,w3]]", () => {
+  const rules: RuleGroup = {
+    match: "all",
+    conditions: [
+      {
+        match: "any",
+        conditions: [
+          { type: "tag", value: "low", weight: 1 },
+          { type: "tag", value: "high", weight: 5 },
+        ],
+      },
+      {
+        match: "all",
+        conditions: [
+          { type: "tag", value: "req1", weight: 2 },
+          { type: "tag", value: "req2", weight: 3 },
+        ],
+      },
+    ],
+  };
+  const b = bm("a", { tag_names: ["high", "req1", "req2"] });
+  assert.equal(matchWeight(b, rules), 5 + (2 + 3));
+});
+
+test("matchWeight: a folder with no weights configured scores 0 for everyone (regression)", () => {
+  const rules: RuleGroup = {
+    match: "any",
+    conditions: [{ type: "tag", value: "dev" }, { type: "tag", value: "news" }],
+  };
+  assert.equal(matchWeight(bm("a", { tag_names: ["dev"] }), rules), 0);
+  assert.equal(matchWeight(bm("b", { tag_names: ["news"] }), rules), 0);
+});
+
+// ---- sortForDisplay -----------------------------------------------------------
+
+test("sortForDisplay: weight is primary and descending", () => {
+  const rules: RuleGroup = {
+    match: "any",
+    conditions: [
+      { type: "tag", value: "low", weight: 1 },
+      { type: "tag", value: "high", weight: 10 },
+    ],
+  };
+  const list = [bm("a", { tag_names: ["low"] }), bm("b", { tag_names: ["high"] })];
+  const result = sortForDisplay(list, folder({ rules }));
+  assert.deepEqual(result.map((b) => b.id), ["b", "a"]);
+});
+
+test("sortForDisplay: sort 'added' orders by date desc, undated last", () => {
+  const list = [
+    bm("old", { date: "2026-01-01T00:00:00Z" }),
+    bm("undated"),
+    bm("new", { date: "2026-07-01T00:00:00Z" }),
+  ];
+  const result = sortForDisplay(list, folder({ sort: "added" }));
+  assert.deepEqual(result.map((b) => b.id), ["new", "old", "undated"]);
+});
+
+test("sortForDisplay: sort 'modified' prefers dateModified, falls back to date", () => {
+  const list = [
+    bm("modified-recent", { date: "2026-01-01T00:00:00Z", dateModified: "2026-07-01T00:00:00Z" }),
+    bm("added-only", { date: "2026-06-01T00:00:00Z" }), // no dateModified: falls back to date
+    bm("modified-old", { date: "2026-01-01T00:00:00Z", dateModified: "2026-02-01T00:00:00Z" }),
+  ];
+  const result = sortForDisplay(list, folder({ sort: "modified" }));
+  assert.deepEqual(result.map((b) => b.id), ["modified-recent", "added-only", "modified-old"]);
+});
+
+test("sortForDisplay: sort 'alphabetical' is case-insensitive", () => {
+  const list = [bm("a", { title: "Banana" }), bm("b", { title: "apple" })];
+  const result = sortForDisplay(list, folder({ sort: "alphabetical" }));
+  assert.deepEqual(result.map((b) => b.id), ["b", "a"]);
+});
+
+test("sortForDisplay: unset sort + no weights preserves original order (regression)", () => {
+  const rules: RuleGroup = { match: "any", conditions: [{ type: "tag", value: "dev" }] };
+  const list = [bm("c", { tag_names: ["dev"] }), bm("a", { tag_names: ["dev"] }), bm("b", { tag_names: ["dev"] })];
+  const result = sortForDisplay(list, folder({ rules }));
+  assert.deepEqual(result.map((b) => b.id), ["c", "a", "b"]);
+});
+
+test("computeFolderMembership: limit (selection) + weight + sort (display) compose correctly", () => {
+  const map = bookmarksToMap([
+    bm("a", { tag_names: ["high"], title: "Zebra", date: "2026-01-01T00:00:00Z" }),
+    bm("b", { tag_names: ["low"], title: "Apple", date: "2026-02-01T00:00:00Z" }),
+    bm("c", { tag_names: ["low"], title: "Mango", date: "2026-03-01T00:00:00Z" }),
+    bm("d", { tag_names: ["low"], title: "Banana", date: "2010-01-01T00:00:00Z" }), // oldest, excluded by limit
+  ]);
+  const rules: RuleGroup = {
+    match: "any",
+    conditions: [
+      { type: "tag", value: "high", weight: 10 },
+      { type: "tag", value: "low", weight: 1 },
+    ],
+  };
+  const [result] = computeFolderMembership(map, [
+    folder({ rules, limit: 3, sort: "alphabetical" }),
+  ]);
+  // limit=3 selects the 3 newest by date (a, c, b — "d" excluded), then display
+  // orders by weight desc (a=10 first), tiebreak alphabetical among weight-1 ties (b, c).
+  assert.deepEqual(result.bookmark_ids, ["a", "b", "c"]);
 });

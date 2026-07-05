@@ -85,6 +85,9 @@ function renderFolders(bookmarkMap: BookmarkMap, folders: Folder[]): void {
         onOpen: (bookmark) => {
           ext.tabs.update({ url: bookmark.url });
         },
+        onOpenBackground: (bookmark) => {
+          ext.tabs.create({ url: bookmark.url, active: false });
+        },
         onOpenAll: (bookmarks) => {
           for (const bookmark of bookmarks) {
             ext.tabs.create({ url: bookmark.url, active: false });

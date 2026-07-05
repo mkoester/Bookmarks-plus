@@ -71,6 +71,11 @@ const CONDITION_TYPES: ReadonlySet<string> = new Set<ConditionType>([
   "title_contains",
   "provider",
 ]);
+const SORT_MODES: ReadonlySet<string> = new Set<NonNullable<Folder["sort"]>>([
+  "added",
+  "modified",
+  "alphabetical",
+]);
 
 export interface RuleGroupParseResult {
   valid: boolean;
@@ -103,8 +108,20 @@ function parseRuleNode(data: unknown, path: string): { errors: string[]; node: R
     if (typeof obj.value !== "string" || !obj.value.trim()) {
       errors.push(`${path}: value must be a non-empty string`);
     }
+    if ("weight" in obj && obj.weight !== undefined) {
+      if (typeof obj.weight !== "number" || !Number.isFinite(obj.weight)) {
+        errors.push(`${path}: weight must be a number when present`);
+      }
+    }
     if (errors.length > 0) return { errors, node: null };
-    return { errors: [], node: { type: obj.type as ConditionType, value: obj.value as string } };
+    return {
+      errors: [],
+      node: {
+        type: obj.type as ConditionType,
+        value: obj.value as string,
+        ...(typeof obj.weight === "number" ? { weight: obj.weight } : {}),
+      },
+    };
   }
 
   const errors: string[] = [];
@@ -188,6 +205,12 @@ export function parseFolders(data: unknown): FoldersParseResult {
       }
     }
 
+    if ("sort" in obj && obj.sort !== undefined) {
+      if (typeof obj.sort !== "string" || !SORT_MODES.has(obj.sort)) {
+        entryErrors.push(`${prefix}: sort must be one of added, modified, alphabetical when present`);
+      }
+    }
+
     errors.push(...entryErrors);
     if (entryErrors.length > 0 || !rules.group) return;
 
@@ -197,6 +220,7 @@ export function parseFolders(data: unknown): FoldersParseResult {
       name: obj.name as string,
       rules: rules.group,
       ...(typeof obj.limit === "number" ? { limit: obj.limit } : {}),
+      ...(typeof obj.sort === "string" ? { sort: obj.sort as Folder["sort"] } : {}),
       // bookmark_ids is install-specific and recomputed at sync; keep it if
       // sane so defensive loads don't blank folders between syncs.
       bookmark_ids:
