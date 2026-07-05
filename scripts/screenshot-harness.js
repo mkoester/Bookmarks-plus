@@ -92,7 +92,12 @@
       onInstalled: listener,
       onConnect: listener,
     },
-    tabs: { create: noop, update: noop },
+    tabs: {
+      create: noop,
+      update: noop,
+      remove: noop,
+      getCurrent: () => Promise.resolve({ id: 1 }),
+    },
     windows: { getCurrent: () => Promise.resolve({ id: 1 }) },
     permissions: {
       getAll: () => Promise.resolve({ origins: [], permissions: [] }),

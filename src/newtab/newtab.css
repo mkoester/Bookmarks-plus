@@ -48,6 +48,12 @@ body {
 }
 
 .folder h2 {
+  /* Flex row: .folder-name span + .open-all-btn (same pattern as the
+     popup/sidebar <summary>). */
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.25rem;
   font-size: 0.75rem;
   text-transform: uppercase;
   letter-spacing: 0.08em;
@@ -60,10 +66,15 @@ body {
 }
 
 .folder li {
+  /* The open-in-background button is a sibling of the anchor, not nested in it. */
+  display: flex;
+  align-items: center;
   margin-bottom: 0.25rem;
 }
 
 .folder a {
+  flex: 1;
+  min-width: 0;
   display: flex;
   align-items: center;
   gap: 0.5rem;

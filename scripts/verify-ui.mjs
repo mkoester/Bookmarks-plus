@@ -39,6 +39,7 @@ const PAGES = [
   { page: "options", window: "1100,900" },
   { page: "popup", window: "420,700" },
   { page: "sidebar", window: "380,800" },
+  { page: "newtab", window: "1100,900" },
 ];
 
 function ensureBuilt() {

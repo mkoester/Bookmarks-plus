@@ -292,6 +292,10 @@ button:hover {
 }
 
 
+.folders-list {
+  position: relative; /* positioning context for the .drop-marker during folder reorder */
+}
+
 .folder-editor {
   background: var(--surface);
   border: 1px solid var(--border);

@@ -32,6 +32,7 @@ let providers: ProviderConfig[] = [];
 let bookmarks: BookmarkMap = {};
 let syncIntervalMinutes = 15;
 let theme: Theme = "system";
+let newTabCloseOnOpenAll = false;
 let grantedHostOrigins: string[] = [];
 let activeTabId = "overview";
 let tagSort: { key: "tag" | "count"; dir: "asc" | "desc" } = { key: "count", dir: "desc" };
@@ -48,6 +49,7 @@ async function init(): Promise<void> {
   bookmarks = savedBookmarks;
   syncIntervalMinutes = settings.syncIntervalMinutes;
   theme = settings.theme;
+  newTabCloseOnOpenAll = settings.newTabCloseOnOpenAll;
 
   await applyStoredTheme();
   await loadGrantedOrigins();
@@ -215,6 +217,22 @@ function renderOverviewPanel(): HTMLElement {
       "prompt the first time. When New Tab is handed to Bookmarks+, new tabs show the launcher."
     )
   );
+
+  const closeLabel = document.createElement("label");
+  closeLabel.className = "checkbox";
+  const closeInput = document.createElement("input");
+  closeInput.type = "checkbox";
+  closeInput.checked = newTabCloseOnOpenAll;
+  closeInput.addEventListener("change", () => {
+    newTabCloseOnOpenAll = closeInput.checked;
+  });
+  closeLabel.appendChild(closeInput);
+  closeLabel.append(
+    "Close the New Tab page after \"Open all in background tabs\" on a folder " +
+    "(unchecked: the launcher stays open)"
+  );
+  newTabSection.appendChild(closeLabel);
+
   root.appendChild(newTabSection);
 
   return root;
@@ -234,9 +252,15 @@ function renderFoldersPanel(): HTMLElement {
   section.appendChild(renderLogicHelp());
   section.appendChild(renderSortHelp());
 
+  // Dedicated container so folder drag-reorder has a clean sibling list (and a
+  // positioning context for its .drop-marker) — the section also holds
+  // headings, help blocks and buttons.
+  const list = document.createElement("div");
+  list.className = "folders-list";
   folders.forEach((folder, index) => {
-    section.appendChild(renderFolderEditor(folder, index));
+    list.appendChild(renderFolderEditor(folder, index, list));
   });
+  section.appendChild(list);
 
   const addFolderBtn = document.createElement("button");
   addFolderBtn.textContent = "+ Add folder";
@@ -451,7 +475,7 @@ async function save(): Promise<void> {
     return;
   }
 
-  const settings: Settings = { syncIntervalMinutes, providers, theme };
+  const settings: Settings = { syncIntervalMinutes, providers, theme, newTabCloseOnOpenAll };
 
   // Permission request must be the first await — user gesture activation expires after the first
   // async operation in Firefox. Bundle the bookmarks permission (browser provider) and the host
@@ -867,12 +891,22 @@ function renderSortHelp(): HTMLElement {
 // renderTabs() re-renders (same pattern as tagSort).
 const jsonEdit = new Map<string, { text: string; error: string | null }>();
 
-function renderFolderEditor(folder: Folder, index: number): HTMLElement {
+function renderFolderEditor(folder: Folder, index: number, listContainer: HTMLElement): HTMLElement {
   const div = document.createElement("div");
   div.className = "folder-editor";
 
   const header = document.createElement("div");
   header.className = "folder-header";
+
+  // Folder order is the display order on every surface (folders are saved as
+  // an array), so folders reorder with the same pointer-drag as rule rows.
+  const handle = document.createElement("span");
+  handle.className = "drag-handle";
+  handle.title = "Drag to reorder";
+  handle.textContent = "⠿";
+  header.appendChild(handle);
+  div.classList.add("drag-row");
+  wireReorderHandle(handle, div, listContainer, folders, index);
 
   const nameInput = document.createElement("input");
   nameInput.type = "text";
@@ -1038,7 +1072,7 @@ function renderGroupEditor(
     handleParent?.insertBefore(handle, handleParent.firstChild);
 
     child.classList.add("drag-row"); // query hook for the reorder geometry below
-    wireReorderHandle(handle, child, conditionsDiv, group, i);
+    wireReorderHandle(handle, child, conditionsDiv, group.conditions, i);
 
     conditionsDiv.appendChild(child);
   });
@@ -1067,17 +1101,17 @@ function renderGroupEditor(
   return div;
 }
 
-// Pointer-based drag reorder for one rule row (leaf condition or nested group)
-// within its own group's conditions array. Chosen over native HTML5 drag-and-
-// drop because native DnD can't reliably start from a row full of form controls
-// in Firefox, gives no easy live drop indicator, and doesn't work on touch.
-// Reorders siblings only (order has no effect on match semantics — editing
-// convenience). A floating .drop-marker shows where the row would land.
+// Pointer-based drag reorder for one row within its backing array — used for
+// rule rows (a group's conditions) and for whole folder editors (the folders
+// list). Chosen over native HTML5 drag-and-drop because native DnD can't
+// reliably start from a row full of form controls in Firefox, gives no easy
+// live drop indicator, and doesn't work on touch. Reorders siblings only.
+// A floating .drop-marker shows where the row would land.
 function wireReorderHandle(
   handle: HTMLElement,
   row: HTMLElement,
   container: HTMLElement,
-  group: RuleGroup,
+  items: unknown[],
   fromIndex: number
 ): void {
   handle.addEventListener("pointerdown", (e) => {
@@ -1124,8 +1158,8 @@ function wireReorderHandle(
       // toIndex is an "insert before" position; before self or the slot right
       // after self are both no-ops.
       if (to === fromIndex || to === fromIndex + 1) return;
-      const [moved] = group.conditions.splice(fromIndex, 1);
-      group.conditions.splice(fromIndex < to ? to - 1 : to, 0, moved);
+      const [moved] = items.splice(fromIndex, 1);
+      items.splice(fromIndex < to ? to - 1 : to, 0, moved);
       renderTabs();
     };
 

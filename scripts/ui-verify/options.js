@@ -10,9 +10,11 @@ window.__verify.run(async ({ check, waitFor }) => {
   const fe = () => document.querySelector(".folder-editor");
   check("folder editors render", !!fe());
 
-  // Header holds only the name + JSON/Remove buttons; Latest/Sort live on their
-  // own row below (the layout fix that stopped the header overflowing).
-  check("folder-header has name + 2 buttons", fe().querySelector(".folder-header").children.length === 3);
+  // Header holds the drag handle, the name and the JSON/Remove buttons;
+  // Latest/Sort live on their own row below (the layout fix that stopped the
+  // header overflowing).
+  check("folder-header has handle + name + 2 buttons", fe().querySelector(".folder-header").children.length === 4);
+  check("folder editors are drag rows with a header handle", fe().classList.contains("drag-row") && !!fe().querySelector(".folder-header > .drag-handle"));
   const settings = fe().querySelector(".folder-settings");
   check("folder-settings row has Latest + Sort", !!settings?.querySelector(".folder-limit") && !!settings?.querySelector(".folder-sort"));
 
@@ -79,4 +81,24 @@ window.__verify.run(async ({ check, waitFor }) => {
   check("dropping row0 at the end reorders to row1,row2,row0 (" + orderAfter.join(",") + ")", orderAfter.join(",") === "row1,row2,row0");
   check("marker cleared after drop", !fe().querySelector(".drop-marker"));
   check("no row left dimmed after drop", !fe().querySelector(".dragging"));
+
+  // --- Folder drag-reorder (same pointer mechanism, folders array) ---
+  const folderRows = () => Array.from(document.querySelectorAll(".folders-list > .drag-row"));
+  const folderNames = () =>
+    folderRows().map((r) => r.querySelector(".folder-header input[type=text]").value);
+  check("demo folders render as drag rows", folderRows().length >= 2);
+
+  const namesBefore = folderNames();
+  const expected = namesBefore.slice(1).concat(namesBefore[0]).join(",");
+  const fHandle = folderRows()[0].querySelector(".folder-header .drag-handle");
+  const fBelowAll = folderRows()[folderRows().length - 1].getBoundingClientRect().bottom + 5;
+
+  fHandle.dispatchEvent(pe("pointerdown", folderRows()[0].getBoundingClientRect().top + 5));
+  check("folder drop marker appears in the folders list", !!document.querySelector(".folders-list > .drop-marker"));
+  fHandle.dispatchEvent(pe("pointermove", fBelowAll));
+  fHandle.dispatchEvent(pe("pointerup", fBelowAll));
+
+  const namesAfter = folderNames().join(",");
+  check("dropping folder0 at the end reorders the folders (" + namesAfter + ")", namesAfter === expected);
+  check("folder marker cleared after drop", !document.querySelector(".folders-list .drop-marker"));
 });

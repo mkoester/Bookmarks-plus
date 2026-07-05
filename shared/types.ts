@@ -148,6 +148,10 @@ export interface Settings {
   syncIntervalMinutes: number;
   providers: ProviderConfig[];
   theme: Theme;
+  // New-tab launcher only: close the New Tab page after "Open all in
+  // background tabs" on a folder. Default is to keep it open (consistent with
+  // the per-bookmark background button, which never closes the current view).
+  newTabCloseOnOpenAll: boolean;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -156,6 +160,7 @@ export const DEFAULT_SETTINGS: Settings = {
     { id: "static-default", type: "static", name: "Static" },
   ],
   theme: "system",
+  newTabCloseOnOpenAll: false,
 };
 
 // ---- Messages ---------------------------------------------------------------
