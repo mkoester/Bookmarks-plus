@@ -1,6 +1,8 @@
-# linkding-ext
+# Bookmarks+ (Bookmarks-plus)
 
 Browser extension for [Linkding](https://github.com/sissbruecker/linkding) — displays your bookmarks as a customizable folder-based launcher on the New Tab page and popup.
+
+> Repository renamed from `linkding-ext` to `Bookmarks-plus` on 2026-07-05 (GitHub redirects the old URLs).
 
 ## Features
 

@@ -117,7 +117,7 @@ Three upload artifacts → **three listings across two stores**:
 
 ### Both stores
 - [ ] Verify the `STATIC_DATA_URL` in `src/options/options.ts` matches the real
-      published repo. Currently `github.com/mkoester/linkding-ext` @ `main` →
+      published repo. Currently `github.com/mkoester/Bookmarks-plus` @ `main` →
       `shared/data/static.ts`. **404s if owner/repo/branch differ.**
 - [ ] Host `PRIVACY.md` somewhere linkable (GitHub raw/Pages) and use that URL.
 - [ ] Screenshots: `web-store/screenshots/` (5x 1280x800). One set covers both

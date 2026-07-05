@@ -25,7 +25,7 @@ const SINGLETON_PROVIDER_TYPES = new Set<ProviderType>(["static", "browser"]);
 // The bundled demo bookmarks/folders, so users can see what tags/titles/URLs the
 // static provider supplies when crafting folder rules.
 const STATIC_DATA_URL =
-  "https://raw.githubusercontent.com/mkoester/linkding-ext/refs/heads/main/shared/data/static.ts";
+  "https://raw.githubusercontent.com/mkoester/Bookmarks-plus/refs/heads/main/shared/data/static.ts";
 
 let folders: Folder[] = [];
 let providers: ProviderConfig[] = [];
