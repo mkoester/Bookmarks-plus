@@ -120,3 +120,13 @@
   color: var(--fg-strong);
   background: var(--hover-bg);
 }
+
+/* "Sync folders now" button on the popup/sidebar/newtab surfaces (visible only
+   while a remote folder source is configured); spins while the sync runs. */
+@keyframes bp-spin {
+  to { transform: rotate(360deg); }
+}
+
+.sync-folders-btn.syncing {
+  animation: bp-spin 1s linear infinite;
+}

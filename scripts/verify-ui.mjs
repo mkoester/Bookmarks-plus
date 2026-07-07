@@ -83,13 +83,26 @@ function verifyPage({ page, window: windowSize }) {
   const url = `file://${path.join(work, page, "_verify.html")}`;
   let dom;
   try {
+    // stderr is piped (not ignored) so a launch failure can say WHY — chromium
+    // logs the fatal reason there (e.g. a sandbox blocking its singleton socket).
     dom = execFileSync(
       "chromium",
       ["--headless=new", "--no-sandbox", "--disable-gpu", `--window-size=${windowSize}`, "--dump-dom", url],
-      { encoding: "utf-8", stdio: ["ignore", "pipe", "ignore"], maxBuffer: 64 * 1024 * 1024 }
+      { encoding: "utf-8", stdio: ["ignore", "pipe", "pipe"], maxBuffer: 64 * 1024 * 1024 }
     );
   } catch (err) {
-    return { page, lines: [`FAIL: chromium failed to render (${err.message})`], ok: false };
+    // err.message embeds the full piped stderr — keep just its first line (the
+    // failed command) plus chromium's FATAL line(s), or the stderr tail as a
+    // fallback (crashpad noise often follows the fatal reason).
+    const summary = err.message.split("\n")[0];
+    const stderrLines = (err.stderr || "").trim().split("\n").filter(Boolean);
+    const fatal = stderrLines.filter((l) => l.includes(":FATAL:"));
+    const stderrTail = (fatal.length > 0 ? fatal : stderrLines.slice(-3)).join("\n      ");
+    return {
+      page,
+      lines: [`FAIL: chromium failed to render (${summary})${stderrTail ? `\n      ${stderrTail}` : ""}`],
+      ok: false,
+    };
   }
   const match = dom.match(/<pre id="verify-result">([\s\S]*?)<\/pre>/);
   if (!match) {

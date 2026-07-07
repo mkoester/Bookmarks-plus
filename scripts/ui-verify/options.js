@@ -108,6 +108,10 @@ window.__verify.run(async ({ check, waitFor }) => {
     ?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
   const overviewRow = document.querySelector(".provider-header");
   check("overview provider row has a Sync now button", !!overviewRow.querySelector(".sync-now-btn"));
+  check(
+    "overview linkding row has a Full sync now button",
+    !!overviewRow.querySelector(".full-sync-now-btn")
+  );
 
   // --- Provider tab: interval override, full-sync interval, last-synced, Sync now ---
   Array.from(document.querySelectorAll("#tab-bar button"))
@@ -140,8 +144,59 @@ window.__verify.run(async ({ check, waitFor }) => {
   );
   syncNow.dispatchEvent(new MouseEvent("click", { bubbles: true }));
   check(
-    "Sync now sends sync_provider for this provider id",
-    sent.length === 1 && sent[0].type === "sync_provider" && sent[0].providerId === "ld"
+    "Sync now sends sync_provider for this provider id (incremental — no full flag)",
+    sent.length === 1 && sent[0].type === "sync_provider" && sent[0].providerId === "ld" &&
+      sent[0].full === undefined
   );
   check("Sync now disables itself while syncing", syncNow.disabled === true);
+
+  // "Full sync now" (linkding only): same message plus the full flag, which
+  // makes the background bypass the incremental modified_since cursor.
+  const fullSyncNow = panel.querySelector(".provider-actions .full-sync-now-btn");
+  check("linkding tab has a Full sync now button", !!fullSyncNow);
+  fullSyncNow.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+  check(
+    "Full sync now sends sync_provider with full:true",
+    sent.length === 2 && sent[1].type === "sync_provider" && sent[1].providerId === "ld" &&
+      sent[1].full === true
+  );
+
+  // --- Folders tab: remote folder source flips the editor to read-only ---
+  Array.from(document.querySelectorAll("#tab-bar button"))
+    .find((b) => b.textContent === "Folders")
+    ?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+  const srcInput = () => document.querySelector(".folder-source-url");
+  check("Folders tab has a folder-source URL input", !!srcInput());
+  check(
+    "folder-source interval input present (empty = manual refresh only)",
+    !!document.querySelector(".folder-source-interval") &&
+      document.querySelector(".folder-source-interval").placeholder === "manual"
+  );
+  check("editor is editable while no source is set", !!document.querySelector(".folder-editor"));
+
+  // Type a source URL and leave the field: the editor must become read-only
+  // (a remote refresh replaces all folders, local edits would be lost).
+  srcInput().value = "https://example.com/folders.json";
+  srcInput().dispatchEvent(new Event("input", { bubbles: true }));
+  srcInput().dispatchEvent(new Event("change", { bubbles: true }));
+  check(
+    "configuring a source switches folders to read-only",
+    !document.querySelector(".folder-editor") && !!document.querySelector(".folder-readonly")
+  );
+  const buttons = () => Array.from(document.querySelectorAll("#tab-panels button"));
+  check(
+    "import is hidden in read-only mode, export stays",
+    !buttons().some((b) => b.textContent.startsWith("Import")) &&
+      buttons().some((b) => b.textContent === "Export folders")
+  );
+  check(
+    "no folder-source Sync now before the source was ever saved",
+    !document.querySelector(".sync-folders-now-btn")
+  );
+
+  // Clearing the URL restores the editor.
+  srcInput().value = "";
+  srcInput().dispatchEvent(new Event("input", { bubbles: true }));
+  srcInput().dispatchEvent(new Event("change", { bubbles: true }));
+  check("clearing the source restores the folder editor", !!document.querySelector(".folder-editor"));
 });

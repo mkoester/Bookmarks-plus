@@ -1,8 +1,20 @@
 /* New-tab invariants: bookmarks stay native anchors (no click hijack), each row
    has an open-in-background button, each folder heading has an open-all button,
-   and open-all honours the newTabCloseOnOpenAll setting (keep open by default,
-   close the page's own tab when enabled). Runs against the real newtab bundle
-   with mocked chrome.* (screenshot-harness demo data). */
+   open-all honours the newTabCloseOnOpenAll setting (keep open by default,
+   close the page's own tab when enabled), and the "Sync folders now" button
+   appears when a folder source is configured. Runs against the real newtab
+   bundle with mocked chrome.* (screenshot-harness demo data). */
+
+// Runs before DOMContentLoaded — patch storage so init sees a folder source.
+// Mutates in place — the harness hands out its live settings object (the
+// newTabCloseOnOpenAll flip below depends on that).
+const __origGet = chrome.storage.local.get.bind(chrome.storage.local);
+chrome.storage.local.get = async (key) => {
+  const out = await __origGet(key);
+  if (out.settings) out.settings.folderSource = { url: "https://example.com/folders.json" };
+  return out;
+};
+
 window.__verify.run(async ({ check, waitFor }) => {
   await waitFor(() => document.querySelector("#folders .folder"));
   const folder = document.querySelector("#folders .folder");
@@ -52,4 +64,11 @@ window.__verify.run(async ({ check, waitFor }) => {
   await settle();
   await settle();
   check("open-all closes the New Tab page when the setting is enabled", removedOwnTab === true);
+
+  // --- "Sync folders now" (folder source configured via the patch above) ---
+  const syncBtn = document.getElementById("sync-folders");
+  check(
+    "'Sync folders now' button is visible next to the settings gear",
+    !!syncBtn && !syncBtn.hidden && syncBtn.title === "Sync folders now"
+  );
 });

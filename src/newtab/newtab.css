@@ -14,14 +14,19 @@ body {
 #header {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  gap: 0.25rem;
   margin-bottom: 1.5rem;
   font-size: 0.85rem;
   color: var(--fg-muted);
 }
 
-#open-settings {
-  margin-left: auto;
+/* Pushes the header buttons (sync-folders when visible, then the gear) right. */
+#status {
+  margin-right: auto;
+}
+
+#open-settings,
+#sync-folders {
   background: transparent;
   border: none;
   color: var(--fg-muted);
@@ -32,7 +37,8 @@ body {
   border-radius: 4px;
 }
 
-#open-settings:hover {
+#open-settings:hover,
+#sync-folders:hover {
   color: var(--fg-strong);
   background: var(--hover-bg);
 }

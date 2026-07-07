@@ -3,6 +3,7 @@ import { getBookmarks, getFolders, getSyncStatus } from "@shared/storage";
 import { applyStoredTheme } from "@shared/theme";
 import { renderSyncErrorBanner } from "@shared/syncBanner";
 import { renderFolderDetails } from "@shared/folderList";
+import { initSyncFoldersButton } from "@shared/syncFoldersButton";
 import type { BookmarkMap, Folder, Message } from "@shared/types";
 
 async function init(): Promise<void> {
@@ -24,12 +25,20 @@ async function init(): Promise<void> {
     window.close();
   });
 
+  // The popup renders once at init (no storage listener), so re-render with
+  // the fresh folders once the folder-source sync finished.
+  await initSyncFoldersButton(async () => {
+    const [freshBookmarks, freshFolders] = await Promise.all([getBookmarks(), getFolders()]);
+    renderFolders(freshBookmarks, freshFolders);
+  });
+
   const message: Message = { type: "sync_requested" };
   ext.runtime.sendMessage(message).catch(() => {});
 }
 
 function renderFolders(bookmarkMap: BookmarkMap, folders: Folder[]): void {
   const container = document.getElementById("folders")!;
+  container.innerHTML = "";
 
   if (folders.length === 0) {
     container.innerHTML = '<p class="empty">No folders configured.</p>';

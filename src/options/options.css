@@ -529,3 +529,41 @@ button:hover {
   min-height: 1.2em;
   margin-bottom: 0.5rem;
 }
+
+/* ---- Remote folder source ---- */
+
+.folder-source {
+  margin-bottom: 1.5rem;
+}
+
+/* Read-only folder list shown while a remote source owns the folders. */
+.folder-readonly {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 0.5rem 0.75rem;
+  margin-bottom: 0.5rem;
+}
+
+.folder-readonly summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.folder-readonly-meta {
+  font-weight: normal;
+  font-size: 0.85rem;
+  color: var(--fg-muted);
+}
+
+.folder-readonly pre {
+  font-family: monospace;
+  font-size: 0.85rem;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--fg);
+  padding: 0.4rem 0.6rem;
+  margin-top: 0.5rem;
+  overflow-x: auto;
+}

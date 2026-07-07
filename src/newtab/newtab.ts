@@ -3,6 +3,7 @@ import { getBookmarks, getFolders, getSettings, getSyncStatus } from "@shared/st
 import { applyStoredTheme } from "@shared/theme";
 import { renderSyncErrorBanner } from "@shared/syncBanner";
 import { renderBookmarkItem } from "@shared/folderList";
+import { initSyncFoldersButton, refreshSyncFoldersButton } from "@shared/syncFoldersButton";
 import { safeFolderBookmarks } from "@shared/bookmarks";
 import type { Bookmark, BookmarkMap, Folder, Message, SyncStatus } from "@shared/types";
 
@@ -22,6 +23,8 @@ async function init(): Promise<void> {
   document.getElementById("open-settings")?.addEventListener("click", () => {
     ext.runtime.openOptionsPage();
   });
+  // Re-render happens via the storage listener; the button only needs wiring.
+  await initSyncFoldersButton();
 
   await render();
   requestSync();
@@ -159,6 +162,7 @@ function listenForChanges(): void {
     }
     if (changes.settings) {
       applyStoredTheme();
+      refreshSyncFoldersButton();
     }
   });
 }
