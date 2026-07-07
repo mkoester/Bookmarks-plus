@@ -2,16 +2,21 @@ import ext from "@shared/browser";
 import {
   getBookmarks,
   getFolders,
+  getFolderSourceState,
   getProviderSyncState,
   getSettings,
+  getSyncStatus,
   saveFolders,
   saveSettings,
 } from "@shared/storage";
 import { applyStoredTheme, setTheme } from "@shared/theme";
+import { FOLDER_SOURCE_ID } from "@shared/folderSource";
 import type {
   BookmarkMap,
   BrowserProviderConfig,
   Folder,
+  FolderSourceConfig,
+  FolderSourceState,
   FeedProviderConfig,
   LinkdingProviderConfig,
   JsonProviderConfig,
@@ -44,17 +49,30 @@ let providerSyncState: ProviderSyncStateMap = {};
 let syncIntervalMinutes = 15;
 let theme: Theme = "system";
 let newTabCloseOnOpenAll = false;
+// Remote folder source — form state (persisted on Save) plus the last SAVED
+// config: "Sync folders now" and the origin-revocation logic act on what the
+// background actually uses, not on unsaved edits.
+let folderSourceUrl = "";
+let folderSourceIntervalMinutes: number | undefined;
+let savedFolderSource: FolderSourceConfig | undefined;
+let folderSourceState: FolderSourceState | null = null;
+// The folder source's sticky sync error (from syncStatus), shown inline on the
+// Folders tab so a failing source is visible right where it's configured.
+let folderSourceError: string | null = null;
 let grantedHostOrigins: string[] = [];
 let activeTabId = "overview";
 let tagSort: { key: "tag" | "count"; dir: "asc" | "desc" } = { key: "count", dir: "desc" };
 
 async function init(): Promise<void> {
-  const [settings, savedFolders, savedBookmarks, savedSyncState] = await Promise.all([
-    getSettings(),
-    getFolders(),
-    getBookmarks(),
-    getProviderSyncState(),
-  ]);
+  const [settings, savedFolders, savedBookmarks, savedSyncState, savedFolderSourceState, syncStatus] =
+    await Promise.all([
+      getSettings(),
+      getFolders(),
+      getBookmarks(),
+      getProviderSyncState(),
+      getFolderSourceState(),
+      getSyncStatus(),
+    ]);
 
   folders = savedFolders;
   providers = settings.providers;
@@ -63,6 +81,12 @@ async function init(): Promise<void> {
   syncIntervalMinutes = settings.syncIntervalMinutes;
   theme = settings.theme;
   newTabCloseOnOpenAll = settings.newTabCloseOnOpenAll;
+  savedFolderSource = settings.folderSource;
+  folderSourceUrl = settings.folderSource?.url ?? "";
+  folderSourceIntervalMinutes = settings.folderSource?.syncIntervalMinutes;
+  folderSourceState = savedFolderSourceState;
+  folderSourceError =
+    syncStatus?.errors.find((e) => e.providerId === FOLDER_SOURCE_ID)?.message ?? null;
 
   await applyStoredTheme();
   await loadGrantedOrigins();
@@ -268,6 +292,29 @@ function renderFoldersPanel(): HTMLElement {
       "Conditions can be nested into ALL / ANY / NONE groups, e.g. A AND (B OR C)."
     )
   );
+  section.appendChild(renderFolderSourceSection());
+
+  // While a remote source is configured, the file is the single source of
+  // truth: every refresh replaces all folders, so local edits would be
+  // silently overwritten — show the folders read-only instead. Export stays
+  // available (it's how a remote file is seeded from the current folders).
+  if (folderSourceConfigured()) {
+    jsonEdit.clear();
+    section.appendChild(
+      hint(
+        "Folders are managed by the remote source above — local editing is disabled because " +
+        "every refresh replaces all folders. Clear the source URL (and Save) to edit them " +
+        "here again."
+      )
+    );
+    const list = document.createElement("div");
+    list.className = "folders-readonly";
+    folders.forEach((folder) => list.appendChild(renderFolderReadOnly(folder)));
+    section.appendChild(list);
+    section.appendChild(renderFolderBackupSection(false));
+    return section;
+  }
+
   section.appendChild(renderLogicHelp());
   section.appendChild(renderSortHelp());
 
@@ -286,9 +333,140 @@ function renderFoldersPanel(): HTMLElement {
   addFolderBtn.addEventListener("click", addFolder);
   section.appendChild(addFolderBtn);
 
-  section.appendChild(renderFolderBackupSection());
+  section.appendChild(renderFolderBackupSection(true));
 
   return section;
+}
+
+// ---- Remote folder source -----------------------------------------------------
+
+function folderSourceConfigured(): boolean {
+  return folderSourceUrl.trim() !== "";
+}
+
+function renderFolderSourceSection(): HTMLElement {
+  const div = document.createElement("div");
+  div.className = "folder-source";
+
+  div.appendChild(sectionHeading("Remote folder source"));
+  div.appendChild(
+    hint(
+      "Optionally load all folder definitions from a JSON file on a web server (same format " +
+      "as Export/Import). Use a RAW file URL — e.g. raw.githubusercontent.com or " +
+      "gist.githubusercontent.com, not the github.com page — Save asks for permission to " +
+      "access exactly that host. Provider conditions reference this installation's provider " +
+      "ids, so they don't port across machines; tag/URL/title rules do."
+    )
+  );
+
+  const urlLabel = document.createElement("label");
+  urlLabel.textContent = "Source URL (empty = folders are edited locally)";
+  const urlInput = document.createElement("input");
+  urlInput.type = "url";
+  urlInput.className = "folder-source-url";
+  urlInput.value = folderSourceUrl;
+  urlInput.placeholder = "https://raw.githubusercontent.com/you/repo/main/folders.json";
+  urlInput.addEventListener("input", () => {
+    folderSourceUrl = urlInput.value.trim();
+  });
+  // Whether the folder editor below is editable depends on this field; only
+  // re-render when the user leaves it (per keystroke would steal the focus).
+  urlInput.addEventListener("change", () => renderTabs());
+  urlLabel.appendChild(urlInput);
+  div.appendChild(urlLabel);
+
+  const intervalLabel = document.createElement("label");
+  intervalLabel.textContent =
+    "Refresh automatically every N minutes (empty = only via \"Sync folders now\")";
+  const intervalInput = document.createElement("input");
+  intervalInput.type = "number";
+  intervalInput.className = "folder-source-interval";
+  intervalInput.min = "1";
+  intervalInput.placeholder = "manual";
+  intervalInput.value =
+    folderSourceIntervalMinutes !== undefined ? String(folderSourceIntervalMinutes) : "";
+  intervalInput.addEventListener("input", () => {
+    const n = parseInt(intervalInput.value, 10);
+    folderSourceIntervalMinutes = Number.isInteger(n) && n > 0 ? n : undefined;
+  });
+  intervalLabel.appendChild(intervalInput);
+  div.appendChild(intervalLabel);
+
+  // Only a SAVED source can be synced — the background reads the settings.
+  if (savedFolderSource?.url) {
+    const actions = document.createElement("div");
+    actions.className = "provider-actions";
+    const syncBtn = document.createElement("button");
+    syncBtn.className = "sync-now-btn sync-folders-now-btn";
+    syncBtn.textContent = "Sync folders now";
+    syncBtn.title = "Fetch the folder source now (uses the last saved URL)";
+    syncBtn.addEventListener("click", () => syncFolderSourceNow(syncBtn));
+    actions.appendChild(syncBtn);
+    div.appendChild(actions);
+    if (folderSourceState?.lastSyncAt) {
+      div.appendChild(
+        hint(`Last synced: ${new Date(folderSourceState.lastSyncAt).toLocaleString()}`)
+      );
+    }
+    if (folderSourceError) {
+      const error = document.createElement("p");
+      error.className = "inline-error";
+      error.textContent = `Last sync failed — ${folderSourceError}`;
+      div.appendChild(error);
+    }
+  }
+
+  return div;
+}
+
+// Forces a fetch of the folder source and re-renders with the replaced folders
+// once the background responds (same shape as syncProviderNow).
+async function syncFolderSourceNow(button: HTMLButtonElement): Promise<void> {
+  button.disabled = true;
+  button.textContent = "Syncing…";
+  try {
+    await ext.runtime.sendMessage({
+      type: "sync_provider",
+      providerId: FOLDER_SOURCE_ID,
+    } satisfies Message);
+  } catch {
+    // background not ready — fall through, re-render restores the button
+  }
+  let syncStatus;
+  [folderSourceState, folders, syncStatus] = await Promise.all([
+    getFolderSourceState(),
+    getFolders(),
+    getSyncStatus(),
+  ]);
+  folderSourceError =
+    syncStatus?.errors.find((e) => e.providerId === FOLDER_SOURCE_ID)?.message ?? null;
+  renderTabs();
+}
+
+// Read-only view of one remotely managed folder: name + Latest/Sort summary,
+// rules as collapsed JSON.
+function renderFolderReadOnly(folder: Folder): HTMLElement {
+  const details = document.createElement("details");
+  details.className = "folder-readonly";
+
+  const summary = document.createElement("summary");
+  summary.textContent = folder.name;
+  const meta: string[] = [];
+  if (folder.limit !== undefined) meta.push(`latest ${folder.limit}`);
+  if (folder.sort) meta.push(`sort: ${folder.sort}`);
+  if (meta.length > 0) {
+    const span = document.createElement("span");
+    span.className = "folder-readonly-meta";
+    span.textContent = ` (${meta.join(", ")})`;
+    summary.appendChild(span);
+  }
+  details.appendChild(summary);
+
+  const pre = document.createElement("pre");
+  pre.textContent = JSON.stringify(folder.rules, null, 2);
+  details.appendChild(pre);
+
+  return details;
 }
 
 // ---- Per-provider panel -----------------------------------------------------
@@ -349,6 +527,8 @@ function renderProviderPanel(providerId: string): HTMLElement {
   actions.className = "provider-actions";
   const syncBtn = renderSyncNowButton(provider);
   if (syncBtn) actions.appendChild(syncBtn);
+  const fullSyncBtn = renderFullSyncNowButton(provider);
+  if (fullSyncBtn) actions.appendChild(fullSyncBtn);
 
   const removeBtn = document.createElement("button");
   removeBtn.className = "remove-provider-btn";
@@ -375,14 +555,38 @@ function renderSyncNowButton(provider: ProviderConfig): HTMLElement | null {
   return btn;
 }
 
+// "Full sync now" (linkding only): re-downloads everything, bypassing the
+// modified_since cursor — the only way to pick up deletions/archiving
+// immediately instead of waiting for the periodic full sync. Feeds don't need
+// it (a feed response is always the complete current list).
+function renderFullSyncNowButton(provider: ProviderConfig): HTMLElement | null {
+  if (provider.type !== "linkding") return null;
+  const btn = document.createElement("button");
+  btn.className = "sync-now-btn full-sync-now-btn";
+  btn.textContent = "Full sync now";
+  btn.title =
+    "Re-download all bookmarks from scratch — picks up deletions and archiving immediately, " +
+    "which the incremental \"Sync now\" can't see (uses the last saved settings)";
+  btn.addEventListener("click", () => syncProviderNow(provider.id, btn, true));
+  return btn;
+}
+
 // Forces a sync of one provider and refreshes the panel afterwards (the
 // background responds once the sync finished, so last-synced/tag counts are
-// fresh on re-render).
-async function syncProviderNow(providerId: string, button: HTMLButtonElement): Promise<void> {
+// fresh on re-render). full = bypass the incremental cursor ("Full sync now").
+async function syncProviderNow(
+  providerId: string,
+  button: HTMLButtonElement,
+  full = false
+): Promise<void> {
   button.disabled = true;
   button.textContent = "Syncing…";
   try {
-    await ext.runtime.sendMessage({ type: "sync_provider", providerId } satisfies Message);
+    await ext.runtime.sendMessage({
+      type: "sync_provider",
+      providerId,
+      ...(full ? { full: true } : {}),
+    } satisfies Message);
   } catch {
     // background not ready — fall through, re-render restores the button
   }
@@ -534,14 +738,34 @@ async function save(): Promise<void> {
     return;
   }
 
-  const settings: Settings = { syncIntervalMinutes, providers, theme, newTabCloseOnOpenAll };
+  const folderSource: FolderSourceConfig | undefined = folderSourceUrl.trim()
+    ? {
+        url: folderSourceUrl.trim(),
+        ...(folderSourceIntervalMinutes !== undefined
+          ? { syncIntervalMinutes: folderSourceIntervalMinutes }
+          : {}),
+      }
+    : undefined;
+  const settings: Settings = {
+    syncIntervalMinutes,
+    providers,
+    theme,
+    newTabCloseOnOpenAll,
+    ...(folderSource ? { folderSource } : {}),
+  };
 
   // Permission request must be the first await — user gesture activation expires after the first
   // async operation in Firefox. Bundle the bookmarks permission (browser provider) and the host
-  // permissions for each remote provider origin (linkding, JSON feeds) into a single request so
+  // permissions for each remote origin (linkding, feeds, folder source) into a single request so
   // the gesture is only spent once.
   const hasBrowserProvider = settings.providers.some((p) => p.type === "browser");
-  const remoteOriginPatterns = remoteProviderOrigins(settings.providers);
+  const folderSourceOrigin = folderSource ? originPattern(folderSource.url) : null;
+  const remoteOriginPatterns = [
+    ...new Set([
+      ...remoteProviderOrigins(settings.providers),
+      ...(folderSourceOrigin ? [folderSourceOrigin] : []),
+    ]),
+  ];
   const needsPermissions = hasBrowserProvider || remoteOriginPatterns.length > 0;
 
   let permissionsGranted = !needsPermissions;
@@ -553,7 +777,19 @@ async function save(): Promise<void> {
   }
 
   await saveSettings(settings);
-  await saveFolders(folders);
+  // With a remote source configured the file owns the folders — writing the
+  // (possibly stale) local copy could outlive the next "unchanged" fetch.
+  if (!folderSource) {
+    await saveFolders(folders);
+  }
+
+  // A folder-source origin that is no longer needed by anything gets revoked
+  // (mirrors what removeProvider does for provider origins).
+  const previousFolderSourceOrigin = savedFolderSource ? originPattern(savedFolderSource.url) : null;
+  if (previousFolderSourceOrigin && !remoteOriginPatterns.includes(previousFolderSourceOrigin)) {
+    await ext.permissions.remove({ origins: [previousFolderSourceOrigin] });
+  }
+  savedFolderSource = folderSource;
 
   if (permissionsGranted) {
     await ext.runtime.sendMessage({ type: "sync_requested" });
@@ -602,6 +838,8 @@ function renderProviderRow(provider: ProviderConfig): HTMLElement {
   header.appendChild(typeBadge);
   const syncBtn = renderSyncNowButton(provider);
   if (syncBtn) header.appendChild(syncBtn);
+  const fullSyncBtn = renderFullSyncNowButton(provider);
+  if (fullSyncBtn) header.appendChild(fullSyncBtn);
   header.appendChild(removeBtn);
   div.appendChild(header);
 
@@ -632,10 +870,12 @@ async function revokeProviderPermissions(removed: ProviderConfig): Promise<void>
     const origin = originPattern(removedUrl);
     const stillNeeded =
       origin !== null &&
-      providers.some((p) => {
+      (providers.some((p) => {
         const url = remoteProviderUrl(p);
         return url !== null && originPattern(url) === origin;
-      });
+      }) ||
+        // The saved folder source may share the origin (e.g. two GitHub raw URLs).
+        (savedFolderSource !== undefined && originPattern(savedFolderSource.url) === origin));
     if (origin !== null && !stillNeeded) {
       await ext.permissions.remove({ origins: [origin] });
     }
@@ -1523,16 +1763,22 @@ function addFolder(): void {
 
 // ---- Folder export / import ---------------------------------------------------
 
-function renderFolderBackupSection(): HTMLElement {
+// withImport = false while a remote folder source is configured: importing
+// would fight the source (every refresh replaces all folders), but exporting
+// stays useful — it's how a remote file is seeded from the current folders.
+function renderFolderBackupSection(withImport: boolean): HTMLElement {
   const div = document.createElement("div");
   div.className = "folder-backup";
 
-  div.appendChild(sectionHeading("Export / Import"));
+  div.appendChild(sectionHeading(withImport ? "Export / Import" : "Export"));
   div.appendChild(
     hint(
-      "Export downloads all folder definitions as a JSON file (without the computed bookmark " +
-      "lists). Import replaces all folders with the pasted or loaded JSON — like every change " +
-      "on this page, nothing is persisted until you press Save."
+      withImport
+        ? "Export downloads all folder definitions as a JSON file (without the computed bookmark " +
+          "lists). Import replaces all folders with the pasted or loaded JSON — like every change " +
+          "on this page, nothing is persisted until you press Save."
+        : "Export downloads all folder definitions as a JSON file (without the computed bookmark " +
+          "lists) — the exact format the remote folder source expects."
     )
   );
 
@@ -1540,6 +1786,8 @@ function renderFolderBackupSection(): HTMLElement {
   exportBtn.textContent = "Export folders";
   exportBtn.addEventListener("click", exportFolders);
   div.appendChild(exportBtn);
+
+  if (!withImport) return div;
 
   const importLabel = document.createElement("label");
   importLabel.textContent = "Import from file";

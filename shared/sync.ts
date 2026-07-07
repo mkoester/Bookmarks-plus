@@ -39,19 +39,26 @@ export function effectiveIntervalMinutes(config: ProviderConfig, globalMinutes: 
     : globalMinutes;
 }
 
-// The alarm has to tick as often as the most impatient provider wants.
+// The alarm has to tick as often as the most impatient provider wants. A
+// folder source with automatic refresh joins that race; a manual-only one
+// (no interval) never influences the alarm.
 export function alarmPeriodMinutes(settings: Settings): number {
   const intervals = settings.providers.map((p) =>
     effectiveIntervalMinutes(p, settings.syncIntervalMinutes)
   );
+  const folderInterval = settings.folderSource?.syncIntervalMinutes;
+  if (typeof folderInterval === "number" && Number.isFinite(folderInterval) && folderInterval >= 1) {
+    intervals.push(folderInterval);
+  }
   return Math.max(1, Math.min(settings.syncIntervalMinutes, ...intervals));
 }
 
-// Whether a provider should be synced on this tick. Based on the last ATTEMPT
-// (not last success), so a failing provider retries at its interval instead of
-// hammering its server on every alarm tick. Missing/unparseable state = due.
+// Whether a provider (or the folder source) should be synced on this tick.
+// Based on the last ATTEMPT (not last success), so a failing source retries at
+// its interval instead of hammering its server on every alarm tick.
+// Missing/unparseable state = due.
 export function isDue(
-  state: ProviderSyncState | undefined,
+  state: { lastAttemptAt: string } | undefined,
   intervalMinutes: number,
   nowMs: number
 ): boolean {
@@ -94,8 +101,9 @@ export function providerFingerprint(config: ProviderConfig): string {
   }
 }
 
-// FNV-1a 32-bit — tiny non-cryptographic hash, enough to detect config edits.
-function fnv1a(text: string): string {
+// FNV-1a 32-bit — tiny non-cryptographic hash, enough to detect config edits
+// (json provider fingerprint) and unchanged folder-source bodies.
+export function fnv1a(text: string): string {
   let hash = 0x811c9dc5;
   for (let i = 0; i < text.length; i++) {
     hash ^= text.charCodeAt(i);

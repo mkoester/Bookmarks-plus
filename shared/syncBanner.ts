@@ -1,3 +1,4 @@
+import { FOLDER_SOURCE_ID } from "./folderSource";
 import type { SyncStatus } from "./types";
 
 // Builds the "couldn't reach a provider" banner, or null when the last sync was
@@ -11,11 +12,20 @@ export function renderSyncErrorBanner(status: SyncStatus | null): HTMLElement | 
   banner.className = "sync-error";
   banner.setAttribute("role", "alert");
 
+  // The remote folder source fails differently from a bookmark provider (it's
+  // the folder definitions that are stale, not the bookmarks) — say which.
+  const hasFolderError = status.errors.some((e) => e.providerId === FOLDER_SOURCE_ID);
+  const hasProviderError = status.errors.some((e) => e.providerId !== FOLDER_SOURCE_ID);
+
   const heading = document.createElement("strong");
   heading.textContent =
-    status.errors.length === 1
-      ? "A provider couldn't be reached"
-      : "Some providers couldn't be reached";
+    hasFolderError && !hasProviderError
+      ? "The folder source couldn't be synced"
+      : hasProviderError && hasFolderError
+        ? "Some syncs failed"
+        : status.errors.length === 1
+          ? "A provider couldn't be reached"
+          : "Some providers couldn't be reached";
   banner.appendChild(heading);
 
   const list = document.createElement("ul");
@@ -28,7 +38,12 @@ export function renderSyncErrorBanner(status: SyncStatus | null): HTMLElement | 
 
   const note = document.createElement("p");
   note.className = "sync-error-note";
-  note.textContent = "Showing the last bookmarks that did sync.";
+  note.textContent =
+    hasFolderError && !hasProviderError
+      ? "Showing the folders from the last successful sync."
+      : hasProviderError && hasFolderError
+        ? "Showing the last bookmarks and folders that did sync."
+        : "Showing the last bookmarks that did sync.";
   banner.appendChild(note);
 
   return banner;

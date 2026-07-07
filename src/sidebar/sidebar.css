@@ -104,3 +104,9 @@ footer button {
 footer button:hover {
   background: var(--border);
 }
+
+/* Icon-sized, unlike the stretched Settings button. */
+footer #sync-folders {
+  flex: 0 0 auto;
+  padding: 0.35rem 0.6rem;
+}

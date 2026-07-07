@@ -63,10 +63,9 @@ the Chrome Web Store (CWS). Pairs with `CLAUDE.md` (architecture) and `PRIVACY.m
   collapsed boolean-logic help (`<details>`) on the Folders tab. Old flat
   rules load unchanged (no migration). 1.0.2 was pre-submission cleanup: shared
   folder-rendering helper (`shared/folderList.ts`), unit tests wired into
-  `pnpm build`, doc fixes. **1.1.4 is the last published version** (AMO:
-  https://addons.mozilla.org/en-US/firefox/addon/bookmarks-plus/ — Approved
-  2026-07-05); the 1.1.5 upload therefore ships only the 1.1.5 changes above —
-  see "Version notes for the 1.1.5 upload" below.
+  `pnpm build`, doc fixes. **1.1.5 is the last published version** (AMO:
+  https://addons.mozilla.org/en-US/firefox/addon/bookmarks-plus/ — live since
+  2026-07-05, confirmed by the user the day it was released).
 - **Code state:** `pnpm build` (type-check + 98 tests + 3 targets) clean; `pnpm
   verify:ui` (headless UI regression, 4 surfaces) green; feed conditional GET
   verified live (xkcd ETag → 304), linkding `modified_since` + pagination
@@ -74,8 +73,8 @@ the Chrome Web Store (CWS). Pairs with `CLAUDE.md` (architecture) and `PRIVACY.m
   incremental sync against the real linkding instance** (no credentials on the
   dev workstation — load the build, sync twice, background console should show
   `incremental` on the second), and re-run `web-ext lint` (0 errors expected).
-- **NOT yet done:** `git push` + `git push --tags`, and the actual store
-  uploads (both the user's).
+- **Store state:** AMO has **1.1.5 live** (2026-07-05). CWS uploads (both
+  listings) still pending as of that date.
 
 ## Build & package (recap — details in CLAUDE.md)
 

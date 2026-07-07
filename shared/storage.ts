@@ -2,6 +2,7 @@ import ext from "./browser";
 import type {
   BookmarkMap,
   Folder,
+  FolderSourceState,
   ProviderSyncStateMap,
   Settings,
   StorageSchema,
@@ -68,6 +69,20 @@ export async function getProviderSyncState(): Promise<ProviderSyncStateMap> {
 
 export async function saveProviderSyncState(state: ProviderSyncStateMap): Promise<void> {
   await ext.storage.local.set({ providerSyncState: state });
+}
+
+export async function getFolderSourceState(): Promise<FolderSourceState | null> {
+  const result = await ext.storage.local.get("folderSourceState");
+  return (result.folderSourceState as FolderSourceState) ?? null;
+}
+
+// null clears the state (folder source removed from the settings).
+export async function saveFolderSourceState(state: FolderSourceState | null): Promise<void> {
+  if (state === null) {
+    await ext.storage.local.remove("folderSourceState");
+  } else {
+    await ext.storage.local.set({ folderSourceState: state });
+  }
 }
 
 export async function getSyncStatus(): Promise<SyncStatus | null> {

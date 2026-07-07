@@ -26,12 +26,19 @@ Browser extension for [Linkding](https://github.com/sissbruecker/linkding) — d
   settings tab. Syncs are incremental where the source supports it — Linkding
   via `modified_since`, web feeds via HTTP conditional GET
   (`ETag`/`Last-Modified`) — with a periodic full sync (configurable, default
-  every 24 h) to catch deletions, which partial updates can't see
+  every 24 h) to catch deletions, which partial updates can't see; the
+  Linkding tab also has a "Full sync now" button to reconcile deletions
+  immediately
 - Import your browser's own bookmarks (folder names become tags)
 - Subscribe to web feeds — RSS 2.0/1.0, Atom, or [JSON Feed](https://www.jsonfeed.org/),
   auto-detected — a feed's current items appear as bookmarks (categories become
   tags, linkblog `external_url` supported), pair with a provider folder rule
   for a "latest from X" folder
+- Optional **remote folder source**: load all folder definitions from a JSON
+  file on any web server (a raw GitHub/gist URL, your own host) — the file is
+  the single source of truth, refreshed via "Sync folders now" buttons (options
+  page and every surface, next to the Settings button) or on an opt-in
+  interval; see below
 - Static demo data mode (no Linkding instance needed)
 - Firefox + Chrome from one codebase
 
@@ -135,6 +142,31 @@ CORS bypass for the extension's own fetches). Without it you'd see a `CORS heade
 > isn't listed). Confirm it from the extension console with `browser.permissions.getAll()`.
 > Re-saving an existing Linkding provider after upgrading triggers the host-permission prompt
 > once.
+
+### Remote folder source
+
+The Folders tab can point at a **JSON file on a web server** (same format as the folder
+export) that then owns the folder definitions — handy for keeping several browsers/machines
+on one shared, version-controlled folder set:
+
+- Use a **raw** file URL (`https://raw.githubusercontent.com/...` or
+  `https://gist.githubusercontent.com/...`, not the `github.com` HTML page); any static
+  web server works. On **Save**, host permission is requested for exactly that origin —
+  the same mechanism as for Linkding/feed providers above.
+- Every refresh **replaces all folders**, so local folder editing is disabled while a
+  source is configured (the Folders tab shows them read-only; Export stays available —
+  it's how you seed the file in the first place). Clear the URL and Save to return to
+  local editing.
+- By default the source is only fetched on **"Sync folders now"** — a button on the
+  Folders tab plus a ⟳ button next to Settings on the popup, sidebar, and New Tab page —
+  and automatically once after Save/URL changes. An optional interval (minutes) enables
+  regular background refreshes.
+- Fetches use HTTP conditional GET (`ETag`/`Last-Modified`) plus a content hash, so an
+  unchanged file is a no-op (folder ids and storage don't churn). Fetch/validation errors
+  appear in the usual sync-error banner and the previous folders stay in place.
+- Limitation: `provider` rule conditions reference this installation's provider config
+  ids, which differ per machine — a folder file shared across machines should stick to
+  tag/URL/title conditions.
 
 ### Pagination
 

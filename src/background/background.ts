@@ -2,10 +2,12 @@ import ext from "@shared/browser";
 import {
   getBookmarks,
   getFolders,
+  getFolderSourceState,
   getProviderSyncState,
   getSettings,
   getSyncStatus,
   saveBookmarksAndSync,
+  saveFolderSourceState,
   saveProviderSyncState,
   saveSyncStatus,
 } from "@shared/storage";
@@ -23,8 +25,15 @@ import {
   pruneBookmarks,
 } from "@shared/sync";
 import { createProvider } from "@shared/providers/index";
+import {
+  FOLDER_SOURCE_ID,
+  fetchFolderSource,
+  folderSourceDue,
+  nextFolderSourceState,
+} from "@shared/folderSource";
 import { debugLog } from "@shared/debug";
 import type {
+  Folder,
   Message,
   ProviderSyncState,
   SyncContext,
@@ -114,7 +123,10 @@ ext.runtime.onMessage.addListener(
       // "Sync now" on one provider: respond only once the sync finished, so
       // the options page can reload the sync state afterwards. Returning true
       // keeps the message channel open for the async sendResponse.
-      sync(true, message.providerId).then(() => sendResponse({ done: true }));
+      // message.full = "Full sync now": bypass the incremental cursor too.
+      sync(true, message.providerId, message.full === true).then(() =>
+        sendResponse({ done: true })
+      );
       return true;
     }
     return false;
@@ -137,8 +149,10 @@ async function setupAlarm(): Promise<void> {
 
 // force bypasses the debounce and the per-provider schedule (not the
 // incremental logic). onlyProviderId narrows a forced sync to one provider
-// (the "Sync now" button).
-async function sync(force = false, onlyProviderId?: string): Promise<void> {
+// (the "Sync now" button) — or, as FOLDER_SOURCE_ID, to the remote folder
+// source alone (the "Sync folders now" buttons). forceFull additionally
+// bypasses the incremental cursor/validators ("Full sync now").
+async function sync(force = false, onlyProviderId?: string, forceFull = false): Promise<void> {
   if (syncing) {
     debugLog("Sync already in progress, skipping");
     return;
@@ -171,7 +185,7 @@ async function sync(force = false, onlyProviderId?: string): Promise<void> {
       attempted.add(config.id);
 
       const fingerprint = providerFingerprint(config);
-      const full = needsFullSync(state, fingerprint, now, fullSyncMaxAgeMs(config));
+      const full = forceFull || needsFullSync(state, fingerprint, now, fullSyncMaxAgeMs(config));
       const ctx: SyncContext = {
         full,
         since: state?.cursor,
@@ -198,6 +212,56 @@ async function sync(force = false, onlyProviderId?: string): Promise<void> {
       }
     }
 
+    // ---- Remote folder source ------------------------------------------------
+    // Deliberately NOT swept along by force alone (surfaces send sync_requested
+    // on every open): it refreshes on the explicit "Sync folders now" buttons,
+    // when never fetched / its URL changed (right after Save), or at its own
+    // opt-in interval. A successful full fetch replaces ALL folders.
+    const folderSourceConfig = settings.folderSource;
+    const folderSourceForced = onlyProviderId === FOLDER_SOURCE_ID;
+    let folderSourceState = await getFolderSourceState();
+    let remoteFolders: Folder[] | null = null;
+    let folderSourceAttempted = false;
+    if (!folderSourceConfig?.url && folderSourceState) {
+      // Source removed from the settings: drop its bookkeeping.
+      folderSourceState = null;
+      await saveFolderSourceState(null);
+    }
+    if (
+      folderSourceConfig?.url &&
+      (onlyProviderId === undefined || folderSourceForced) &&
+      folderSourceDue(folderSourceConfig, folderSourceState ?? undefined, now, folderSourceForced)
+    ) {
+      folderSourceAttempted = true;
+      const attemptIso = new Date().toISOString();
+      try {
+        const result = await fetchFolderSource(folderSourceConfig, folderSourceState ?? undefined);
+        if (result.kind === "full") remoteFolders = result.folders;
+        folderSourceState = nextFolderSourceState(
+          folderSourceState ?? undefined,
+          folderSourceConfig.url,
+          attemptIso,
+          result
+        );
+        debugLog(`Folder source: ${result.kind}, ${result.folders.length} folders`);
+      } catch (err) {
+        console.error("Folder source sync failed:", err);
+        errors.push({
+          name: "Folder source",
+          message: describeError(err),
+          providerId: FOLDER_SOURCE_ID,
+        });
+        // Record the attempt (and pin the fingerprint to the current URL) so a
+        // failing source retries at its interval / on the button, not on every
+        // surface-open force sync.
+        folderSourceState =
+          folderSourceState && folderSourceState.fingerprint === folderSourceConfig.url
+            ? { ...folderSourceState, lastAttemptAt: attemptIso }
+            : { lastSyncAt: "", lastAttemptAt: attemptIso, fingerprint: folderSourceConfig.url };
+      }
+      await saveFolderSourceState(folderSourceState);
+    }
+
     // Reconcile removed providers: drop their bookmarks and sync state.
     const activeIds = settings.providers.map((p) => p.id);
     const pruned = pruneBookmarks(map, activeIds);
@@ -207,22 +271,27 @@ async function sync(force = false, onlyProviderId?: string): Promise<void> {
       if (!activeIds.includes(id)) delete syncState[id];
     }
 
-    if (!force && attempted.size === 0 && !anyChange) {
+    if (!force && attempted.size === 0 && !anyChange && !folderSourceAttempted) {
       debugLog("Sync tick: no provider due, nothing to do");
       return;
     }
 
     // force always recomputes folders — an options Save may have changed folder
-    // rules even when every provider reported "unchanged".
-    if (force || anyChange) {
-      const folders = await getFolders();
+    // rules even when every provider reported "unchanged". A fresh remote
+    // folder list replaces the stored one before the recompute.
+    if (force || anyChange || remoteFolders !== null) {
+      const folders = remoteFolders ?? (await getFolders());
       const recomputed = computeFolderMembership(map, folders);
       await saveBookmarksAndSync(map, recomputed, new Date().toISOString());
     }
     await saveProviderSyncState(syncState);
 
     const previous = await getSyncStatus();
-    const merged = mergeSyncErrors(previous?.errors ?? [], attempted, errors, activeIds);
+    // The folder source participates in error merging under its reserved id,
+    // so its banner entry sticks until retried and clears on success.
+    if (folderSourceAttempted) attempted.add(FOLDER_SOURCE_ID);
+    const errorScopeIds = folderSourceConfig?.url ? [...activeIds, FOLDER_SOURCE_ID] : activeIds;
+    const merged = mergeSyncErrors(previous?.errors ?? [], attempted, errors, errorScopeIds);
     await saveSyncStatus({ at: new Date().toISOString(), errors: merged });
     debugLog(`Sync complete: ${attempted.size} providers attempted, ${Object.keys(map).length} bookmarks total`);
   } catch (error) {

@@ -3,6 +3,7 @@ import { getBookmarks, getFolders, getSyncStatus } from "@shared/storage";
 import { applyStoredTheme } from "@shared/theme";
 import { renderSyncErrorBanner } from "@shared/syncBanner";
 import { renderFolderDetails } from "@shared/folderList";
+import { initSyncFoldersButton, refreshSyncFoldersButton } from "@shared/syncFoldersButton";
 import type { BookmarkMap, Folder, Message, SyncStatus } from "@shared/types";
 
 // The sidebar mirrors the popup's folder rendering, but it stays open, so it
@@ -24,6 +25,8 @@ async function init(): Promise<void> {
   document.getElementById("open-options")?.addEventListener("click", () => {
     ext.runtime.openOptionsPage();
   });
+  // Re-render happens via the storage listener; the button only needs wiring.
+  await initSyncFoldersButton();
 }
 
 // Chromium only: register this panel (keyed by window) with the background so the keyboard
@@ -115,6 +118,7 @@ function listenForChanges(): void {
     }
     if (changes.settings) {
       applyStoredTheme();
+      refreshSyncFoldersButton();
     }
   });
 }
