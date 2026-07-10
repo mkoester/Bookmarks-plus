@@ -1,6 +1,7 @@
 import ext from "@shared/browser";
 import { getBookmarks, getFolders, getSettings, getSyncStatus } from "@shared/storage";
 import { applyStoredTheme } from "@shared/theme";
+import { applyBuildBadge } from "@shared/buildBadge";
 import { renderSyncErrorBanner } from "@shared/syncBanner";
 import { renderBookmarkItem } from "@shared/folderList";
 import { initSyncFoldersButton, refreshSyncFoldersButton } from "@shared/syncFoldersButton";
@@ -19,6 +20,7 @@ let lastRenderKey = "";
 // if we're running here, the user opted in — just render the launcher.
 async function init(): Promise<void> {
   await applyStoredTheme();
+  applyBuildBadge();
 
   document.getElementById("open-settings")?.addEventListener("click", () => {
     ext.runtime.openOptionsPage();

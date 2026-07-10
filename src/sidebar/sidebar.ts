@@ -1,6 +1,7 @@
 import ext from "@shared/browser";
 import { getBookmarks, getFolders, getSyncStatus } from "@shared/storage";
 import { applyStoredTheme } from "@shared/theme";
+import { applyBuildBadge } from "@shared/buildBadge";
 import { renderSyncErrorBanner } from "@shared/syncBanner";
 import { renderFolderDetails } from "@shared/folderList";
 import { initSyncFoldersButton, refreshSyncFoldersButton } from "@shared/syncFoldersButton";
@@ -16,6 +17,7 @@ let lastRenderKey = "";
 
 async function init(): Promise<void> {
   await applyStoredTheme();
+  applyBuildBadge();
   registerForToggle();
 
   await render();

@@ -10,6 +10,7 @@ import {
   saveSettings,
 } from "@shared/storage";
 import { applyStoredTheme, setTheme } from "@shared/theme";
+import { applyBuildBadge, installedVersion } from "@shared/buildBadge";
 import { FOLDER_SOURCE_ID } from "@shared/folderSource";
 import type {
   BookmarkMap,
@@ -101,14 +102,13 @@ async function init(): Promise<void> {
     syncStatus?.errors.find((e) => e.providerId === FOLDER_SOURCE_ID)?.message ?? null;
 
   await applyStoredTheme();
+  applyBuildBadge();
   await loadGrantedOrigins();
 
-  // Installed build's version, injected into the manifest from package.json at
-  // build time. Non-release builds carry the git-decorated version in
-  // version_name (Chromium) or version itself (Firefox); prefer version_name so
-  // both show it. Guarded: the screenshot harness's manifest mock has no version.
-  const manifest = ext.runtime.getManifest() as { version?: string; version_name?: string };
-  const version = manifest.version_name ?? manifest.version;
+  // Installed build's version (version_name on Chromium / version on Firefox for
+  // non-release builds — see installedVersion()). Undefined under the screenshot
+  // harness's manifest mock, so the header stays untouched there.
+  const version = installedVersion();
   if (version) {
     document.getElementById("version")!.textContent = `v${version}`;
   }
