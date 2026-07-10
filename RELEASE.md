@@ -7,9 +7,10 @@ the Chrome Web Store (CWS). Pairs with `CLAUDE.md` (architecture) and `PRIVACY.m
 ## Current status
 
 - **Version:** 1.2.0 (single source of truth = `package.json`; injected into each
-  manifest at build). Released — merged to `main`, tagged `v1.2.0` — on
-  2026-07-10. **New runtime dependency: `fuzzysort`** — the repo's second (the
-  first is `fast-xml-parser`); zero-dep, MIT.
+  manifest at build). Git-released — merged to `main`, tagged `v1.2.0` — on
+  2026-07-10; **submitted to AMO on 2026-07-10, awaiting review (not yet live)**.
+  CWS uploads still to do. **New runtime dependency: `fuzzysort`** — the repo's
+  second (the first is `fast-xml-parser`); zero-dep, MIT.
   1.2.0 = **tag autocomplete**: the folder editor's `tag` rule-condition value
   field gains a fuzzy autocomplete dropdown of existing tags — the union across
   all sources, ranked by frequency, with per-tag counts and the matched
@@ -94,11 +95,12 @@ the Chrome Web Store (CWS). Pairs with `CLAUDE.md` (architecture) and `PRIVACY.m
   collapsed boolean-logic help (`<details>`) on the Folders tab. Old flat
   rules load unchanged (no migration). 1.0.2 was pre-submission cleanup: shared
   folder-rendering helper (`shared/folderList.ts`), unit tests wired into
-  `pnpm build`, doc fixes. **1.1.9 is the last published version** (live on the
+  `pnpm build`, doc fixes. **1.1.9 is the last *published* version** (live on the
   stores since 2026-07-10, covering 1.1.7–1.1.9; predecessors 1.1.6 and 1.1.5 —
   AMO https://addons.mozilla.org/en-US/firefox/addon/bookmarks-plus/ — also
-  shipped).
-- **Code state:** `pnpm build` (type-check + 122 tests + 3 targets) clean; `pnpm
+  shipped). **1.2.0 is submitted to AMO and awaiting review** (not yet accepted);
+  once it goes live, update this line and the "Store state" below.
+- **Code state:** `pnpm build` (type-check + 138 tests + 3 targets) clean; `pnpm
   verify:ui` (headless UI regression, 4 surfaces) green; feed conditional GET
   verified live (xkcd ETag → 304), linkding `modified_since` + pagination
   verified against a local mock of the API. Before upload: **smoke-test the
@@ -108,8 +110,10 @@ the Chrome Web Store (CWS). Pairs with `CLAUDE.md` (architecture) and `PRIVACY.m
 - **Store state:** **1.1.9 live** (all three listings, since 2026-07-10) — the
   last published version, covering 1.1.7 + 1.1.9 (built from clean `main`,
   `web-store/bookmarks-plus-{firefox,chrome,chrome-newtab}-1.1.9.zip`). 1.1.6 and
-  1.1.5 shipped before it. The "1.1.9 upload" release notes below are the ones
-  that were published.
+  1.1.5 shipped before it. **1.2.0 submitted to AMO 2026-07-10 — under review, not
+  yet live** (`web-store/bookmarks-plus-firefox-1.2.0.zip`); the two CWS listings
+  still on 1.1.9 (1.2.0 CWS uploads pending). The "1.2.0 upload" release + reviewer
+  notes below are the ones submitted.
 
 ## Build & package (recap — details in CLAUDE.md)
 
@@ -194,6 +198,19 @@ Three upload artifacts → **three listings across two stores**:
       permissions; declare no data sale/transfer.
 - [ ] $5 one-time developer registration (if not already).
 - [ ] Paste the reviewer note (below).
+
+## Version notes for the 1.2.0 upload (everything since published 1.1.9)
+
+Paste into AMO "Release notes" (reuse for CWS listing descriptions — CWS has no
+changelog field). One user-facing feature. **New runtime dependency this release:
+`fuzzysort`** (see the reviewer note) — so the review surface *does* change, unlike
+recent releases.
+
+> - **Tag autocomplete in folder rules** — when you add a "tag is…" condition, the
+>   value field now suggests your existing tags as you type. Matching is fuzzy (the
+>   matched letters are highlighted) and each suggestion shows how many bookmarks
+>   use that tag. Tags from all your sources are offered, and you can still type a
+>   tag that doesn't exist yet.
 
 ## Version notes for the 1.1.9 upload (everything since published 1.1.6)
 
@@ -316,6 +333,13 @@ update — CWS has no changelog field):
 
 ## Reviewer note (paste into AMO / CWS "notes to reviewer")
 
+> **New in 1.2.0 — one added third-party library.** This release bundles a second
+> runtime dependency, `fuzzysort` (MIT, from npm, unmodified), to rank the new
+> tag-autocomplete suggestions in the options page. It is a pure, dependency-free
+> library and ships in `options.js`; like everything else the build is **not
+> minified**, so it is readable source. This brings the total to two bundled
+> libraries (`fast-xml-parser`, `fuzzysort`). No new permissions in this release.
+>
 > **About the `<all_urls>` optional host permission**
 >
 > This is declared under `optional_host_permissions` — it is **not** granted at install. It is requested at runtime, **only when the user saves a provider that fetches from a URL** (their self-hosted Linkding instance, or a web feed they subscribe to), and is narrowed to **exactly the origin the user typed** (e.g. `https://links.example.com/*`) via `permissions.request({ origins: [<that one host>] })`. See `src/options/options.ts` → `save()` and `remoteProviderOrigins()`.
@@ -324,9 +348,17 @@ update — CWS has no changelog field):
 >
 > Users can review and revoke each granted host in the extension's options ("Permissions" tab) or the browser's add-on settings.
 >
-> **Bundled third-party code:** `fast-xml-parser` (MIT, from npm, unmodified) is included in the background bundle to parse RSS/Atom feeds — MV3 service workers have no `DOMParser`. The build is deliberately **not minified**, so the library ships as readable source inside `background.js`.
+> **Bundled third-party code (both MIT, from npm, unmodified; not minified):**
+> `fast-xml-parser` — in the background bundle (`background.js`) to parse RSS/Atom
+> feeds, since MV3 service workers have no `DOMParser`. `fuzzysort` — in the
+> options bundle (`options.js`) to rank the tag-autocomplete suggestions (new in
+> 1.2.0). Both ship as readable source.
 >
 > **Also note:** the shared background bundle references `chrome.sidePanel.open` (a Chrome-only API), guarded by a runtime `if (chrome.sidePanel)` check so it never executes in Firefox. This is the source of the `UNSUPPORTED_API` lint warning.
+>
+> **Build (reproduce `dist/firefox` from source):** `pnpm install && pnpm build`
+> (type-check + unit tests + webpack, production mode, not minified, no source
+> maps); load `dist/firefox`.
 
 ## Open / optional follow-ups
 
