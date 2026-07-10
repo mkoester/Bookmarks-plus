@@ -46,7 +46,11 @@ export function alarmPeriodMinutes(settings: Settings): number {
   const intervals = settings.providers.map((p) =>
     effectiveIntervalMinutes(p, settings.syncIntervalMinutes)
   );
-  const folderInterval = settings.folderSource?.syncIntervalMinutes;
+  // A paused source (enabled === false) won't fetch, so it must not shorten the
+  // alarm. Inlined rather than importing isFolderSourceActive — folderSource.ts
+  // imports from here, so the reverse would be a cycle.
+  const fs = settings.folderSource;
+  const folderInterval = fs && fs.enabled !== false ? fs.syncIntervalMinutes : undefined;
   if (typeof folderInterval === "number" && Number.isFinite(folderInterval) && folderInterval >= 1) {
     intervals.push(folderInterval);
   }

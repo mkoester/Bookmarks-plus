@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   fetchFolderSource,
   folderSourceDue,
+  isFolderSourceActive,
   nextFolderSourceState,
 } from "../shared/folderSource";
 import { alarmPeriodMinutes, fnv1a } from "../shared/sync";
@@ -24,11 +25,31 @@ const VALID_FOLDERS_JSON = JSON.stringify([
   { name: "Dev", rules: { match: "any", conditions: [{ type: "tag", value: "dev" }] } },
 ]);
 
+// ---- isFolderSourceActive --------------------------------------------------------
+
+test("isFolderSourceActive: URL present and not paused", () => {
+  assert.equal(isFolderSourceActive(undefined), false);
+  assert.equal(isFolderSourceActive(config({ url: "  " })), false);
+  assert.equal(isFolderSourceActive(config()), true);
+  assert.equal(isFolderSourceActive(config({ enabled: true })), true);
+  assert.equal(isFolderSourceActive(config({ enabled: false })), false);
+});
+
 // ---- folderSourceDue ------------------------------------------------------------
 
 test("folderSourceDue: unconfigured or blank URL is never due", () => {
   assert.equal(folderSourceDue(undefined, undefined, NOW, true), false);
   assert.equal(folderSourceDue(config({ url: "  " }), undefined, NOW, true), false);
+});
+
+test("folderSourceDue: a paused source is never due, not even when forced", () => {
+  const paused = config({ enabled: false });
+  assert.equal(folderSourceDue(paused, undefined, NOW, true), false);
+  assert.equal(folderSourceDue(paused, undefined, NOW, false), false);
+  assert.equal(
+    folderSourceDue(config({ enabled: false, syncIntervalMinutes: 1 }), undefined, NOW, false),
+    false
+  );
 });
 
 test("folderSourceDue: forced (Sync folders now) is always due", () => {
@@ -72,6 +93,8 @@ test("alarmPeriodMinutes: folder-source interval joins the race; manual-only doe
   assert.equal(alarmPeriodMinutes(settings), 5);
   settings.folderSource = { url: URL_A }; // manual refresh only
   assert.equal(alarmPeriodMinutes(settings), 15);
+  settings.folderSource = { url: URL_A, syncIntervalMinutes: 5, enabled: false }; // paused
+  assert.equal(alarmPeriodMinutes(settings), 15); // its interval must not shorten the alarm
 });
 
 // ---- nextFolderSourceState ---------------------------------------------------------

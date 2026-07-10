@@ -10,6 +10,14 @@ import type { Folder, FolderSourceConfig, FolderSourceState } from "./types";
 // crypto.randomUUID()s (or the "static-default" built-in).
 export const FOLDER_SOURCE_ID = "folder-source";
 
+// A source counts as ACTIVE only when it has a URL and isn't paused. Paused
+// (enabled === false) means: remember the URL and its host permission, but
+// don't fetch and don't treat the folders as remote-owned — so the options page
+// re-enables local editing. Absent `enabled` = active (back-compat).
+export function isFolderSourceActive(config: FolderSourceConfig | undefined): boolean {
+  return !!config && config.url.trim() !== "" && config.enabled !== false;
+}
+
 export interface FolderSourceFetchResult {
   // full: `folders` is the complete new folder list (replaces ALL folders).
   // unchanged: source not modified (304, or identical body by hash) — keep
@@ -33,7 +41,7 @@ export function folderSourceDue(
   nowMs: number,
   forced: boolean
 ): boolean {
-  if (!config || !config.url.trim()) return false;
+  if (!config || !isFolderSourceActive(config)) return false;
   if (forced) return true;
   if (!state || state.fingerprint !== config.url) return true;
   const interval = config.syncIntervalMinutes;

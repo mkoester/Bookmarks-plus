@@ -29,6 +29,7 @@ import {
   FOLDER_SOURCE_ID,
   fetchFolderSource,
   folderSourceDue,
+  isFolderSourceActive,
   nextFolderSourceState,
 } from "@shared/folderSource";
 import { debugLog } from "@shared/debug";
@@ -290,7 +291,9 @@ async function sync(force = false, onlyProviderId?: string, forceFull = false): 
     // The folder source participates in error merging under its reserved id,
     // so its banner entry sticks until retried and clears on success.
     if (folderSourceAttempted) attempted.add(FOLDER_SOURCE_ID);
-    const errorScopeIds = folderSourceConfig?.url ? [...activeIds, FOLDER_SOURCE_ID] : activeIds;
+    const errorScopeIds = isFolderSourceActive(folderSourceConfig)
+      ? [...activeIds, FOLDER_SOURCE_ID]
+      : activeIds;
     const merged = mergeSyncErrors(previous?.errors ?? [], attempted, errors, errorScopeIds);
     await saveSyncStatus({ at: new Date().toISOString(), errors: merged });
     debugLog(`Sync complete: ${attempted.size} providers attempted, ${Object.keys(map).length} bookmarks total`);
