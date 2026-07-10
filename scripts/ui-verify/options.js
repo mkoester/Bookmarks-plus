@@ -18,6 +18,35 @@ window.__verify.run(async ({ check, waitFor }) => {
   const settings = fe().querySelector(".folder-settings");
   check("folder-settings row has Latest + Sort", !!settings?.querySelector(".folder-limit") && !!settings?.querySelector(".folder-sort"));
 
+  // --- Per-folder surface targeting ("Show on" checkboxes) ---
+  const clickTab = (name) =>
+    Array.from(document.querySelectorAll("#tab-bar button"))
+      .find((b) => b.textContent === name)
+      ?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+  const surfaceBoxes = () =>
+    Array.from(fe().querySelectorAll(".folder-surfaces input[type=checkbox]"));
+  check("folder-settings row has a Show-on surfaces group", !!settings?.querySelector(".folder-surfaces"));
+  check(
+    "surfaces group has 3 checkboxes, all checked by default (folder shows everywhere)",
+    surfaceBoxes().length === 3 && surfaceBoxes().every((b) => b.checked)
+  );
+  // Uncheck the last one (New tab); the mutation is on the in-memory folder (no
+  // re-render on toggle). Switch tabs and back to force a fresh render, then the
+  // rebuilt checkboxes must reflect the persisted surfaces subset.
+  const newtabBox = surfaceBoxes()[2];
+  newtabBox.checked = false;
+  newtabBox.dispatchEvent(new Event("change", { bubbles: true }));
+  clickTab("Overview");
+  clickTab("Folders");
+  const after = surfaceBoxes();
+  check(
+    "unchecking a surface persists (popup+sidebar checked, newtab unchecked after re-render)",
+    after.length === 3 && after[0].checked && after[1].checked && !after[2].checked
+  );
+  // Restore the everywhere state so later checks see the unmodified demo folder.
+  after[2].checked = true;
+  after[2].dispatchEvent(new Event("change", { bubbles: true }));
+
   const sortSelect = fe().querySelector(".folder-sort-select");
   check(
     "sort dropdown offers Default/added/modified/alphabetical",

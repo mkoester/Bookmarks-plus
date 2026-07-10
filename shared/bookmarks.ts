@@ -4,6 +4,7 @@ import type {
   Folder,
   RuleCondition,
   RuleNode,
+  Surface,
 } from "./types";
 import { isRuleGroup } from "./types";
 import { isAllowedBookmarkUrl } from "./url";
@@ -17,6 +18,17 @@ export function bookmarksToMap(bookmarks: Bookmark[]): BookmarkMap {
 
 export function bookmarkMapToArray(map: BookmarkMap): Bookmark[] {
   return Object.values(map);
+}
+
+// ---- Surface targeting ------------------------------------------------------
+
+/**
+ * The folders that should appear on a given surface. A folder with no
+ * `surfaces` field shows everywhere (the default); an explicit list includes
+ * only the named surfaces (empty list = hidden everywhere).
+ */
+export function foldersForSurface(folders: Folder[], surface: Surface): Folder[] {
+  return folders.filter((f) => f.surfaces === undefined || f.surfaces.includes(surface));
 }
 
 // ---- Incremental sync merge -------------------------------------------------

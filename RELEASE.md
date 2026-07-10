@@ -6,10 +6,19 @@ the Chrome Web Store (CWS). Pairs with `CLAUDE.md` (architecture) and `PRIVACY.m
 
 ## Current status
 
-- **Version:** 1.2.0 (single source of truth = `package.json`; injected into each
-  manifest at build). Released — merged to `main`, tagged `v1.2.0` — on
-  2026-07-10. **New runtime dependency: `fuzzysort`** — the repo's second (the
-  first is `fast-xml-parser`); zero-dep, MIT.
+- **Version:** 1.2.1 (single source of truth = `package.json`; injected into each
+  manifest at build). **Prepared on `develop`, not yet released** — the last
+  git-released + AMO-live version is **1.2.0** (merged to `main`, tagged `v1.2.0`,
+  live on AMO since 2026-07-10). **The extension has
+  never been submitted to the Chrome Web Store** — AMO is the only store it ships
+  on so far, so the `chrome`/`chrome-newtab` builds and every CWS note below are
+  prospective (a first CWS submission is still an open task).
+  1.2.1 = **per-folder surface targeting + Save-button pinning**: each folder can
+  choose which surfaces it appears on (popup / sidebar / new tab; default =
+  everywhere), and the options page's "Save settings" button is now pinned beside
+  the tab bar (sticky at the top) so it's reachable without scrolling. **No new
+  permissions and no new dependencies** — review surface unchanged from 1.2.0
+  (still two bundled libraries: `fast-xml-parser`, `fuzzysort`; both MIT, zero-dep).
   1.2.0 = **tag autocomplete**: the folder editor's `tag` rule-condition value
   field gains a fuzzy autocomplete dropdown of existing tags — the union across
   all sources, ranked by frequency, with per-tag counts and the matched
@@ -94,22 +103,24 @@ the Chrome Web Store (CWS). Pairs with `CLAUDE.md` (architecture) and `PRIVACY.m
   collapsed boolean-logic help (`<details>`) on the Folders tab. Old flat
   rules load unchanged (no migration). 1.0.2 was pre-submission cleanup: shared
   folder-rendering helper (`shared/folderList.ts`), unit tests wired into
-  `pnpm build`, doc fixes. **1.1.9 is the last published version** (live on the
-  stores since 2026-07-10, covering 1.1.7–1.1.9; predecessors 1.1.6 and 1.1.5 —
-  AMO https://addons.mozilla.org/en-US/firefox/addon/bookmarks-plus/ — also
-  shipped).
-- **Code state:** `pnpm build` (type-check + 122 tests + 3 targets) clean; `pnpm
+  `pnpm build`, doc fixes. **1.2.0 is the current published version — live on AMO**
+  (Firefox) since 2026-07-10; 1.1.5–1.1.9 shipped on AMO before it
+  (https://addons.mozilla.org/en-US/firefox/addon/bookmarks-plus/). **AMO is the
+  only store — the extension has never been on the Chrome Web Store.**
+- **Code state:** `pnpm build` (type-check + 144 tests + 3 targets) clean; `pnpm
   verify:ui` (headless UI regression, 4 surfaces) green; feed conditional GET
   verified live (xkcd ETag → 304), linkding `modified_since` + pagination
   verified against a local mock of the API. Before upload: **smoke-test the
   incremental sync against the real linkding instance** (no credentials on the
   dev workstation — load the build, sync twice, background console should show
   `incremental` on the second), and re-run `web-ext lint` (0 errors expected).
-- **Store state:** **1.1.9 live** (all three listings, since 2026-07-10) — the
-  last published version, covering 1.1.7 + 1.1.9 (built from clean `main`,
-  `web-store/bookmarks-plus-{firefox,chrome,chrome-newtab}-1.1.9.zip`). 1.1.6 and
-  1.1.5 shipped before it. The "1.1.9 upload" release notes below are the ones
-  that were published.
+- **Store state:** **AMO only.** **1.2.0 live on AMO** (Firefox) since 2026-07-10
+  (`web-store/bookmarks-plus-firefox-1.2.0.zip`, built from clean `main`); 1.1.5–1.1.9
+  shipped on AMO before it. **The Chrome Web Store has never been used** — no CWS
+  listings exist, and the `chrome` / `chrome-newtab` zips have never been uploaded.
+  A first CWS submission (two listings — see the table + checklist below) is an
+  open task. The "1.2.0 upload" release + reviewer notes below are what was
+  submitted to AMO.
 
 ## Build & package (recap — details in CLAUDE.md)
 
@@ -126,13 +137,14 @@ not-for-upload. Clean main produces the plain store-safe version everywhere.
 
 `web-store/` is gitignored — artifacts are regenerated, not committed.
 
-Three upload artifacts → **three listings across two stores**:
+Three upload artifacts → **three listings across two stores** *(planned mapping;
+only the AMO listing exists today — the two CWS listings have not been created yet)*:
 
-| Zip | Store / listing |
-|---|---|
-| `bookmarks-plus-firefox-<v>.zip` | AMO — "Bookmarks+" |
-| `bookmarks-plus-chrome-<v>.zip` | CWS — "Bookmarks+" (leaves native new tab alone) |
-| `bookmarks-plus-chrome-newtab-<v>.zip` | CWS — "Bookmarks+ (new tab edition)" |
+| Zip | Store / listing | Status |
+|---|---|---|
+| `bookmarks-plus-firefox-<v>.zip` | AMO — "Bookmarks+" | live (1.2.0) |
+| `bookmarks-plus-chrome-<v>.zip` | CWS — "Bookmarks+" (leaves native new tab alone) | not yet submitted |
+| `bookmarks-plus-chrome-newtab-<v>.zip` | CWS — "Bookmarks+ (new tab edition)" | not yet submitted |
 
 ## What was done in the polish session (2026-06-30)
 
@@ -194,6 +206,32 @@ Three upload artifacts → **three listings across two stores**:
       permissions; declare no data sale/transfer.
 - [ ] $5 one-time developer registration (if not already).
 - [ ] Paste the reviewer note (below).
+
+## Version notes for the 1.2.1 upload (everything since published 1.2.0)
+
+Paste into AMO "Release notes" (reuse for CWS listing descriptions — CWS has no
+changelog field). **No new install-time permissions and no new dependencies**, so
+the review surface is unchanged from 1.2.0. Two user-facing changes (the second is
+a small options-page usability tweak).
+
+> - **Show a folder only where you want it** — each folder now has a "Show on"
+>   choice (popup, sidebar / side panel, new tab). By default folders show
+>   everywhere; uncheck a surface to hide the folder there.
+> - **The Save button stays in reach** — on the settings page it's now pinned next
+>   to the tabs at the top, so you no longer have to scroll to the bottom to save.
+
+## Version notes for the 1.2.0 upload (everything since published 1.1.9)
+
+Paste into AMO "Release notes" (reuse for CWS listing descriptions — CWS has no
+changelog field). One user-facing feature. **New runtime dependency this release:
+`fuzzysort`** (see the reviewer note) — so the review surface *does* change, unlike
+recent releases.
+
+> - **Tag autocomplete in folder rules** — when you add a "tag is…" condition, the
+>   value field now suggests your existing tags as you type. Matching is fuzzy (the
+>   matched letters are highlighted) and each suggestion shows how many bookmarks
+>   use that tag. Tags from all your sources are offered, and you can still type a
+>   tag that doesn't exist yet.
 
 ## Version notes for the 1.1.9 upload (everything since published 1.1.6)
 
@@ -316,6 +354,18 @@ update — CWS has no changelog field):
 
 ## Reviewer note (paste into AMO / CWS "notes to reviewer")
 
+> **1.2.1 adds no new third-party code and no new permissions** — the two
+> user-facing changes (per-folder surface targeting; pinning the options Save
+> button) are pure app code. The dependency/permission notes below are unchanged
+> and still current (two bundled libraries total).
+>
+> **Third-party libraries (context, unchanged since 1.2.0).** The extension bundles a second
+> runtime dependency, `fuzzysort` (MIT, from npm, unmodified), to rank the new
+> tag-autocomplete suggestions in the options page. It is a pure, dependency-free
+> library and ships in `options.js`; like everything else the build is **not
+> minified**, so it is readable source. This brings the total to two bundled
+> libraries (`fast-xml-parser`, `fuzzysort`). No new permissions in this release.
+>
 > **About the `<all_urls>` optional host permission**
 >
 > This is declared under `optional_host_permissions` — it is **not** granted at install. It is requested at runtime, **only when the user saves a provider that fetches from a URL** (their self-hosted Linkding instance, or a web feed they subscribe to), and is narrowed to **exactly the origin the user typed** (e.g. `https://links.example.com/*`) via `permissions.request({ origins: [<that one host>] })`. See `src/options/options.ts` → `save()` and `remoteProviderOrigins()`.
@@ -324,9 +374,17 @@ update — CWS has no changelog field):
 >
 > Users can review and revoke each granted host in the extension's options ("Permissions" tab) or the browser's add-on settings.
 >
-> **Bundled third-party code:** `fast-xml-parser` (MIT, from npm, unmodified) is included in the background bundle to parse RSS/Atom feeds — MV3 service workers have no `DOMParser`. The build is deliberately **not minified**, so the library ships as readable source inside `background.js`.
+> **Bundled third-party code (both MIT, from npm, unmodified; not minified):**
+> `fast-xml-parser` — in the background bundle (`background.js`) to parse RSS/Atom
+> feeds, since MV3 service workers have no `DOMParser`. `fuzzysort` — in the
+> options bundle (`options.js`) to rank the tag-autocomplete suggestions (new in
+> 1.2.0). Both ship as readable source.
 >
 > **Also note:** the shared background bundle references `chrome.sidePanel.open` (a Chrome-only API), guarded by a runtime `if (chrome.sidePanel)` check so it never executes in Firefox. This is the source of the `UNSUPPORTED_API` lint warning.
+>
+> **Build (reproduce `dist/firefox` from source):** `pnpm install && pnpm build`
+> (type-check + unit tests + webpack, production mode, not minified, no source
+> maps); load `dist/firefox`.
 
 ## Open / optional follow-ups
 

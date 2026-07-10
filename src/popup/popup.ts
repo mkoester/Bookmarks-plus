@@ -4,6 +4,7 @@ import { applyStoredTheme } from "@shared/theme";
 import { applyBuildBadge } from "@shared/buildBadge";
 import { renderSyncErrorBanner } from "@shared/syncBanner";
 import { renderFolderDetails } from "@shared/folderList";
+import { foldersForSurface } from "@shared/bookmarks";
 import { initSyncFoldersButton } from "@shared/syncFoldersButton";
 import { isCopyOnlyUrl } from "@shared/url";
 import { copyBookmarkUrl } from "@shared/copyHint";
@@ -40,10 +41,11 @@ async function init(): Promise<void> {
   ext.runtime.sendMessage(message).catch(() => {});
 }
 
-function renderFolders(bookmarkMap: BookmarkMap, folders: Folder[]): void {
+function renderFolders(bookmarkMap: BookmarkMap, allFolders: Folder[]): void {
   const container = document.getElementById("folders")!;
   container.innerHTML = "";
 
+  const folders = foldersForSurface(allFolders, "popup");
   if (folders.length === 0) {
     container.innerHTML = '<p class="empty">No folders configured.</p>';
     return;

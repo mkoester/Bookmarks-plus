@@ -5,7 +5,7 @@ import { applyBuildBadge } from "@shared/buildBadge";
 import { renderSyncErrorBanner } from "@shared/syncBanner";
 import { renderBookmarkItem } from "@shared/folderList";
 import { initSyncFoldersButton, refreshSyncFoldersButton } from "@shared/syncFoldersButton";
-import { safeFolderBookmarks } from "@shared/bookmarks";
+import { safeFolderBookmarks, foldersForSurface } from "@shared/bookmarks";
 import { isCopyOnlyUrl } from "@shared/url";
 import { copyBookmarkUrl } from "@shared/copyHint";
 import type { Bookmark, BookmarkMap, Folder, Message, SyncStatus } from "@shared/types";
@@ -59,10 +59,11 @@ function renderBanner(syncStatus: SyncStatus | null): void {
   if (banner) slot.appendChild(banner);
 }
 
-function renderFolders(bookmarkMap: BookmarkMap, folders: Folder[]): void {
+function renderFolders(bookmarkMap: BookmarkMap, allFolders: Folder[]): void {
   const container = document.getElementById("folders")!;
   container.innerHTML = "";
 
+  const folders = foldersForSurface(allFolders, "newtab");
   if (folders.length === 0) {
     container.innerHTML =
       '<p class="empty">No folders configured yet. Open <a href="#" id="open-options">settings</a> to get started.</p>';

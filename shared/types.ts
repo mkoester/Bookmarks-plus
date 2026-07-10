@@ -28,6 +28,11 @@ export type ConditionType =
   | "browser_base";
 export type MatchMode = "all" | "any" | "none";
 
+// The three UI surfaces a folder can appear on. Each is a separate build
+// entry/HTML page (no runtime "current surface" variable) — a surface passes
+// its own literal id when filtering the folder list for display.
+export type Surface = "popup" | "sidebar" | "newtab";
+
 export interface RuleCondition {
   type: ConditionType;
   value: string;
@@ -62,6 +67,9 @@ export interface Folder {
   // Secondary display-order tiebreak, applied after matchWeight() scoring.
   // Absent = today's behavior (no explicit ordering beyond weight ties).
   sort?: "added" | "modified" | "alphabetical";
+  // Which surfaces this folder appears on. Absent = all surfaces (the default,
+  // today's behavior). An explicit empty array hides the folder everywhere.
+  surfaces?: Surface[];
   bookmark_ids: string[]; // precomputed at sync time
 }
 
