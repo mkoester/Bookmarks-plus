@@ -8,9 +8,12 @@ the Chrome Web Store (CWS). Pairs with `CLAUDE.md` (architecture) and `PRIVACY.m
 
 - **Version:** 1.2.0 (single source of truth = `package.json`; injected into each
   manifest at build). Git-released — merged to `main`, tagged `v1.2.0` — on
-  2026-07-10; **submitted to AMO on 2026-07-10, awaiting review (not yet live)**.
-  CWS uploads still to do. **New runtime dependency: `fuzzysort`** — the repo's
-  second (the first is `fast-xml-parser`); zero-dep, MIT.
+  2026-07-10; **live on AMO (Firefox) since 2026-07-10**. **The extension has
+  never been submitted to the Chrome Web Store** — AMO is the only store it ships
+  on so far, so the `chrome`/`chrome-newtab` builds and every CWS note below are
+  prospective (a first CWS submission is still an open task). **New runtime
+  dependency: `fuzzysort`** — the repo's second (the first is `fast-xml-parser`);
+  zero-dep, MIT.
   1.2.0 = **tag autocomplete**: the folder editor's `tag` rule-condition value
   field gains a fuzzy autocomplete dropdown of existing tags — the union across
   all sources, ranked by frequency, with per-tag counts and the matched
@@ -95,11 +98,10 @@ the Chrome Web Store (CWS). Pairs with `CLAUDE.md` (architecture) and `PRIVACY.m
   collapsed boolean-logic help (`<details>`) on the Folders tab. Old flat
   rules load unchanged (no migration). 1.0.2 was pre-submission cleanup: shared
   folder-rendering helper (`shared/folderList.ts`), unit tests wired into
-  `pnpm build`, doc fixes. **1.1.9 is the last *published* version** (live on the
-  stores since 2026-07-10, covering 1.1.7–1.1.9; predecessors 1.1.6 and 1.1.5 —
-  AMO https://addons.mozilla.org/en-US/firefox/addon/bookmarks-plus/ — also
-  shipped). **1.2.0 is submitted to AMO and awaiting review** (not yet accepted);
-  once it goes live, update this line and the "Store state" below.
+  `pnpm build`, doc fixes. **1.2.0 is the current published version — live on AMO**
+  (Firefox) since 2026-07-10; 1.1.5–1.1.9 shipped on AMO before it
+  (https://addons.mozilla.org/en-US/firefox/addon/bookmarks-plus/). **AMO is the
+  only store — the extension has never been on the Chrome Web Store.**
 - **Code state:** `pnpm build` (type-check + 138 tests + 3 targets) clean; `pnpm
   verify:ui` (headless UI regression, 4 surfaces) green; feed conditional GET
   verified live (xkcd ETag → 304), linkding `modified_since` + pagination
@@ -107,13 +109,13 @@ the Chrome Web Store (CWS). Pairs with `CLAUDE.md` (architecture) and `PRIVACY.m
   incremental sync against the real linkding instance** (no credentials on the
   dev workstation — load the build, sync twice, background console should show
   `incremental` on the second), and re-run `web-ext lint` (0 errors expected).
-- **Store state:** **1.1.9 live** (all three listings, since 2026-07-10) — the
-  last published version, covering 1.1.7 + 1.1.9 (built from clean `main`,
-  `web-store/bookmarks-plus-{firefox,chrome,chrome-newtab}-1.1.9.zip`). 1.1.6 and
-  1.1.5 shipped before it. **1.2.0 submitted to AMO 2026-07-10 — under review, not
-  yet live** (`web-store/bookmarks-plus-firefox-1.2.0.zip`); the two CWS listings
-  still on 1.1.9 (1.2.0 CWS uploads pending). The "1.2.0 upload" release + reviewer
-  notes below are the ones submitted.
+- **Store state:** **AMO only.** **1.2.0 live on AMO** (Firefox) since 2026-07-10
+  (`web-store/bookmarks-plus-firefox-1.2.0.zip`, built from clean `main`); 1.1.5–1.1.9
+  shipped on AMO before it. **The Chrome Web Store has never been used** — no CWS
+  listings exist, and the `chrome` / `chrome-newtab` zips have never been uploaded.
+  A first CWS submission (two listings — see the table + checklist below) is an
+  open task. The "1.2.0 upload" release + reviewer notes below are what was
+  submitted to AMO.
 
 ## Build & package (recap — details in CLAUDE.md)
 
@@ -130,13 +132,14 @@ not-for-upload. Clean main produces the plain store-safe version everywhere.
 
 `web-store/` is gitignored — artifacts are regenerated, not committed.
 
-Three upload artifacts → **three listings across two stores**:
+Three upload artifacts → **three listings across two stores** *(planned mapping;
+only the AMO listing exists today — the two CWS listings have not been created yet)*:
 
-| Zip | Store / listing |
-|---|---|
-| `bookmarks-plus-firefox-<v>.zip` | AMO — "Bookmarks+" |
-| `bookmarks-plus-chrome-<v>.zip` | CWS — "Bookmarks+" (leaves native new tab alone) |
-| `bookmarks-plus-chrome-newtab-<v>.zip` | CWS — "Bookmarks+ (new tab edition)" |
+| Zip | Store / listing | Status |
+|---|---|---|
+| `bookmarks-plus-firefox-<v>.zip` | AMO — "Bookmarks+" | live (1.2.0) |
+| `bookmarks-plus-chrome-<v>.zip` | CWS — "Bookmarks+" (leaves native new tab alone) | not yet submitted |
+| `bookmarks-plus-chrome-newtab-<v>.zip` | CWS — "Bookmarks+ (new tab edition)" | not yet submitted |
 
 ## What was done in the polish session (2026-06-30)
 
