@@ -5,6 +5,9 @@
   "chrome_url_overrides": {
     "newtab": "newtab/newtab.html"
   },
+  "chrome_settings_overrides": {
+    "homepage": "newtab/newtab.html"
+  },
   "sidebar_action": {
     "default_title": "Bookmarks+",
     "default_panel": "sidebar/sidebar.html",

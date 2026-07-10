@@ -194,6 +194,26 @@ window.__verify.run(async ({ check, waitFor }) => {
     !document.querySelector(".sync-folders-now-btn")
   );
 
+  // Pause toggle: a URL shows the enabled checkbox (checked by default). Unchecking
+  // it pauses the source — folders become editable again WITHOUT clearing the URL.
+  const toggle = () => document.querySelector(".folder-source-enabled");
+  check("configuring a source shows the enabled toggle, checked", !!toggle() && toggle().checked);
+  toggle().checked = false;
+  toggle().dispatchEvent(new Event("change", { bubbles: true }));
+  check(
+    "pausing the source (URL kept) restores the editable folder editor",
+    !!document.querySelector(".folder-editor") &&
+      !document.querySelector(".folder-readonly") &&
+      srcInput().value === "https://example.com/folders.json"
+  );
+  // Re-enabling hands ownership back to the file → read-only again.
+  toggle().checked = true;
+  toggle().dispatchEvent(new Event("change", { bubbles: true }));
+  check(
+    "re-enabling the source switches folders back to read-only",
+    !document.querySelector(".folder-editor") && !!document.querySelector(".folder-readonly")
+  );
+
   // Clearing the URL restores the editor.
   srcInput().value = "";
   srcInput().dispatchEvent(new Event("input", { bubbles: true }));

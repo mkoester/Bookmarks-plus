@@ -7,6 +7,7 @@ import type {
 } from "./types";
 import { isRuleGroup } from "./types";
 import { isAllowedBookmarkUrl } from "./url";
+import { browserBase } from "./browserBase";
 
 // ---- Map conversion ---------------------------------------------------------
 
@@ -48,6 +49,10 @@ function matchesCondition(bookmark: Bookmark, condition: RuleCondition): boolean
     case "provider":
       // value is a provider config id; bookmark ids are "${providerConfigId}:${rawId}"
       return bookmark.id.startsWith(`${condition.value}:`);
+    case "browser_base":
+      // value is "firefox" | "chromium"; matches when it equals this build's target.
+      // Bookmark-independent — the gate is the same for every bookmark in a given build.
+      return condition.value === browserBase;
     default:
       return false;
   }

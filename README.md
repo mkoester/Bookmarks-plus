@@ -6,7 +6,8 @@ Browser extension for [Linkding](https://github.com/sissbruecker/linkding) — d
 
 ## Features
 
-- New Tab page with configurable bookmark folders
+- New Tab page with configurable bookmark folders (on Firefox the launcher is
+  also set as your homepage, so new windows and the Home button show it too)
 - Popup for quick access
 - Folder rules: match bookmarks by tag, URL, title, or source provider with
   nested ALL/ANY/NONE groups (e.g. `A AND (B OR C)`, or "everything except…");
@@ -67,6 +68,8 @@ There are three targets, differing only in their manifest:
 | `chrome-newtab` | `dist/chrome-newtab/` | yes | **Bookmarks+ (new tab edition)** |
 
 Why two Chromium builds: a `chrome_url_overrides.newtab` override is static and can't be toggled at runtime, and Chromium offers no per-extension switch to revert to the native new tab. So Chromium users pick the build they want — plain, or the new-tab edition.
+
+New windows: on Chromium a new window opens the New Tab page, so the `chrome` new-tab edition already covers it. Firefox instead loads the *homepage* (`about:home`) in new windows and on the Home button — a separate surface the new-tab override doesn't touch — so the Firefox build also sets `chrome_settings_overrides.homepage` to the launcher. Firefox prompts once to allow the homepage change; the user always keeps final control (even against another extension) at `about:preferences#home`, which has both the **Homepage and new windows** and **New tabs** dropdowns. (The `homepage` key does nothing useful on Chromium, so it's Firefox-only.)
 
 ### Load in browser
 

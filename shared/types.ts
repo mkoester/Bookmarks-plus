@@ -20,7 +20,12 @@ export type BookmarkMap = Record<string, Bookmark>;
 
 // ---- Folder rules -----------------------------------------------------------
 
-export type ConditionType = "tag" | "url_contains" | "title_contains" | "provider";
+export type ConditionType =
+  | "tag"
+  | "url_contains"
+  | "title_contains"
+  | "provider"
+  | "browser_base";
 export type MatchMode = "all" | "any" | "none";
 
 export interface RuleCondition {
@@ -71,6 +76,11 @@ export interface FolderSourceConfig {
   // Refresh automatically every N minutes. Absent = manual refresh only
   // ("Sync folders now" buttons and after Save/URL changes).
   syncIntervalMinutes?: number;
+  // When false, the source is PAUSED: no automatic or forced fetches happen and
+  // the options page lets you edit folders locally again — but the URL (and its
+  // host permission) are remembered so you can resume with one click. Absent =
+  // enabled (back-compat with configs saved before the pause toggle existed).
+  enabled?: boolean;
 }
 
 // Bookkeeping for the folder source (storage key: folderSourceState).

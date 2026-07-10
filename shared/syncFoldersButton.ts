@@ -1,6 +1,6 @@
 import ext from "./browser";
 import { getSettings } from "./storage";
-import { FOLDER_SOURCE_ID } from "./folderSource";
+import { FOLDER_SOURCE_ID, isFolderSourceActive } from "./folderSource";
 import type { Message } from "./types";
 
 // Wiring for the surfaces' "Sync folders now" button (popup/sidebar/newtab):
@@ -15,7 +15,7 @@ export async function refreshSyncFoldersButton(): Promise<void> {
   const button = document.getElementById("sync-folders") as HTMLButtonElement | null;
   if (!button) return;
   const settings = await getSettings();
-  button.hidden = !settings.folderSource?.url;
+  button.hidden = !isFolderSourceActive(settings.folderSource);
 }
 
 // Sets the initial visibility and wires the click: a forced sync of the folder

@@ -10,6 +10,7 @@ import {
   saveSettings,
 } from "@shared/storage";
 import { applyStoredTheme, setTheme } from "@shared/theme";
+import { applyBuildBadge, installedVersion } from "@shared/buildBadge";
 import { FOLDER_SOURCE_ID } from "@shared/folderSource";
 import type {
   BookmarkMap,
@@ -54,8 +55,16 @@ let newTabCloseOnOpenAll = false;
 // background actually uses, not on unsaved edits.
 let folderSourceUrl = "";
 let folderSourceIntervalMinutes: number | undefined;
+// Pause toggle (form state): false = source is dormant and folders edit locally
+// again. Its URL/permission are kept so it resumes with one click.
+let folderSourceEnabled = true;
 let savedFolderSource: FolderSourceConfig | undefined;
 let folderSourceState: FolderSourceState | null = null;
+// Snapshot of the folders as they were when the source last OWNED them (set on
+// load while active, and when the toggle is switched to paused). The re-enable
+// guard compares against it to tell whether local edits would be lost when the
+// remote file takes over again. null = we can't prove nothing changed.
+let foldersBaseline: string | null = null;
 // The folder source's sticky sync error (from syncStatus), shown inline on the
 // Folders tab so a failing source is visible right where it's configured.
 let folderSourceError: string | null = null;
@@ -84,19 +93,22 @@ async function init(): Promise<void> {
   savedFolderSource = settings.folderSource;
   folderSourceUrl = settings.folderSource?.url ?? "";
   folderSourceIntervalMinutes = settings.folderSource?.syncIntervalMinutes;
+  folderSourceEnabled = settings.folderSource?.enabled !== false;
+  // If the source is active on load, the folders in storage are the remote-owned
+  // ones — snapshot them as the baseline the re-enable guard compares against.
+  foldersBaseline = folderSourceActive() ? JSON.stringify(folders) : null;
   folderSourceState = savedFolderSourceState;
   folderSourceError =
     syncStatus?.errors.find((e) => e.providerId === FOLDER_SOURCE_ID)?.message ?? null;
 
   await applyStoredTheme();
+  applyBuildBadge();
   await loadGrantedOrigins();
 
-  // Installed build's version, injected into the manifest from package.json at
-  // build time. Non-release builds carry the git-decorated version in
-  // version_name (Chromium) or version itself (Firefox); prefer version_name so
-  // both show it. Guarded: the screenshot harness's manifest mock has no version.
-  const manifest = ext.runtime.getManifest() as { version?: string; version_name?: string };
-  const version = manifest.version_name ?? manifest.version;
+  // Installed build's version (version_name on Chromium / version on Firefox for
+  // non-release builds — see installedVersion()). Undefined under the screenshot
+  // harness's manifest mock, so the header stays untouched there.
+  const version = installedVersion();
   if (version) {
     document.getElementById("version")!.textContent = `v${version}`;
   }
@@ -294,11 +306,12 @@ function renderFoldersPanel(): HTMLElement {
   );
   section.appendChild(renderFolderSourceSection());
 
-  // While a remote source is configured, the file is the single source of
-  // truth: every refresh replaces all folders, so local edits would be
-  // silently overwritten — show the folders read-only instead. Export stays
-  // available (it's how a remote file is seeded from the current folders).
-  if (folderSourceConfigured()) {
+  // While a remote source is active, the file is the single source of truth:
+  // every refresh replaces all folders, so local edits would be silently
+  // overwritten — show the folders read-only instead. A PAUSED source falls
+  // through to the editable view below. Export stays available (it's how a
+  // remote file is seeded from the current folders).
+  if (folderSourceActive()) {
     jsonEdit.clear();
     section.appendChild(
       hint(
@@ -340,8 +353,30 @@ function renderFoldersPanel(): HTMLElement {
 
 // ---- Remote folder source -----------------------------------------------------
 
+// A URL is entered (the toggle + sync button are relevant).
 function folderSourceConfigured(): boolean {
   return folderSourceUrl.trim() !== "";
+}
+
+// Configured AND not paused — only then does the file own the folders (read-only
+// editor, save skips saveFolders). Mirrors isFolderSourceActive on the settings.
+function folderSourceActive(): boolean {
+  return folderSourceConfigured() && folderSourceEnabled;
+}
+
+// The re-enable guard: true = safe to resume (no local edits at risk, or the
+// user accepted losing them). Skips the prompt when the folders still match the
+// remote-owned snapshot; a null baseline means we can't prove that, so it asks.
+function confirmReEnableFolderSource(): boolean {
+  const foldersDiverged = foldersBaseline === null || JSON.stringify(folders) !== foldersBaseline;
+  if (!foldersDiverged) return true;
+  return window.confirm(
+    "Enable the remote folder source?\n\n" +
+    "Its next refresh will REPLACE all folders with the file at:\n" +
+    `${folderSourceUrl.trim()}\n\n` +
+    "Any local folder edits not yet uploaded to that file will be lost. " +
+    "Export and upload them first if you want to keep them."
+  );
 }
 
 function renderFolderSourceSection(): HTMLElement {
@@ -392,8 +427,51 @@ function renderFolderSourceSection(): HTMLElement {
   intervalLabel.appendChild(intervalInput);
   div.appendChild(intervalLabel);
 
-  // Only a SAVED source can be synced — the background reads the settings.
-  if (savedFolderSource?.url) {
+  // Pause toggle — only meaningful once a URL is entered. Pausing keeps the URL
+  // (and its host permission) but lets you edit folders locally; re-enabling
+  // hands ownership back to the file. Lets you iterate locally, upload, resume.
+  if (folderSourceConfigured()) {
+    const toggleLabel = document.createElement("label");
+    toggleLabel.className = "checkbox";
+    const toggle = document.createElement("input");
+    toggle.type = "checkbox";
+    toggle.className = "folder-source-enabled";
+    toggle.checked = folderSourceEnabled;
+    toggle.addEventListener("change", () => {
+      if (toggle.checked) {
+        // Re-enable guard: resuming hands folder ownership back to the file,
+        // whose next fetch REPLACES all folders. If edits made while paused
+        // would be lost (diverged from the snapshot, or we can't prove they
+        // didn't), confirm before resuming; on cancel, stay paused.
+        if (!confirmReEnableFolderSource()) {
+          toggle.checked = false;
+          return;
+        }
+        folderSourceEnabled = true;
+      } else {
+        // Snapshot the remote-owned folders at the moment of pausing, so a later
+        // re-enable can tell whether the edits made while paused diverge.
+        foldersBaseline = JSON.stringify(folders);
+        folderSourceEnabled = false;
+      }
+      renderTabs();
+    });
+    toggleLabel.appendChild(toggle);
+    toggleLabel.append("Sync folders from this URL (uncheck to edit folders locally)");
+    div.appendChild(toggleLabel);
+    if (!folderSourceEnabled) {
+      div.appendChild(
+        hint(
+          "Paused — folders are editable below. When you're happy, Export and upload them to the " +
+          "URL above, then re-check this box to hand ownership back to the file."
+        )
+      );
+    }
+  }
+
+  // Only a SAVED, active source can be synced — a paused one would no-op in the
+  // background, so its button is hidden.
+  if (savedFolderSource?.url && savedFolderSource.enabled !== false) {
     const actions = document.createElement("div");
     actions.className = "provider-actions";
     const syncBtn = document.createElement("button");
@@ -440,6 +518,8 @@ async function syncFolderSourceNow(button: HTMLButtonElement): Promise<void> {
   ]);
   folderSourceError =
     syncStatus?.errors.find((e) => e.providerId === FOLDER_SOURCE_ID)?.message ?? null;
+  // Folders were just replaced from the source — re-baseline the re-enable guard.
+  foldersBaseline = folderSourceActive() ? JSON.stringify(folders) : null;
   renderTabs();
 }
 
@@ -744,6 +824,9 @@ async function save(): Promise<void> {
         ...(folderSourceIntervalMinutes !== undefined
           ? { syncIntervalMinutes: folderSourceIntervalMinutes }
           : {}),
+        // Persist the pause explicitly; absent = enabled (the common case), so
+        // configs from before this toggle keep syncing unchanged.
+        ...(folderSourceEnabled ? {} : { enabled: false }),
       }
     : undefined;
   const settings: Settings = {
@@ -777,9 +860,10 @@ async function save(): Promise<void> {
   }
 
   await saveSettings(settings);
-  // With a remote source configured the file owns the folders — writing the
-  // (possibly stale) local copy could outlive the next "unchanged" fetch.
-  if (!folderSource) {
+  // Only an ACTIVE source owns the folders — writing the (possibly stale) local
+  // copy could outlive its next "unchanged" fetch. A paused source is exactly
+  // the case where we DO persist local edits (that's what pausing is for).
+  if (!folderSource || folderSource.enabled === false) {
     await saveFolders(folders);
   }
 
@@ -790,6 +874,9 @@ async function save(): Promise<void> {
     await ext.permissions.remove({ origins: [previousFolderSourceOrigin] });
   }
   savedFolderSource = folderSource;
+  // Reset the guard baseline to the just-saved reality so further edits in this
+  // session are judged against it (active = folders are now remote-owned again).
+  foldersBaseline = folderSourceActive() ? JSON.stringify(folders) : null;
 
   if (permissionsGranted) {
     await ext.runtime.sendMessage({ type: "sync_requested" });
@@ -1561,6 +1648,7 @@ function renderConditionEditor(
     { value: "url_contains", label: "URL contains" },
     { value: "title_contains", label: "Title contains" },
     { value: "provider", label: "Provider" },
+    { value: "browser_base", label: "Browser base" },
   ];
   conditionTypes.forEach(({ value, label }) => {
     const opt = document.createElement("option");
@@ -1572,11 +1660,14 @@ function renderConditionEditor(
   typeSelect.addEventListener("change", () => {
     const previous = condition.type;
     condition.type = typeSelect.value as RuleCondition["type"];
-    // A provider id makes no sense as tag/URL/title text (and vice versa), so
-    // reset the value when crossing that boundary; re-render swaps the control.
+    // The select-backed types (provider id, browser base) carry enum-like values that
+    // make no sense as free-text tag/URL/title (and vice versa), so reset the value when
+    // crossing that boundary; re-render swaps the control.
     if (condition.type === "provider") {
       condition.value = providers[0]?.id ?? "";
-    } else if (previous === "provider") {
+    } else if (condition.type === "browser_base") {
+      condition.value = "firefox";
+    } else if (previous === "provider" || previous === "browser_base") {
       condition.value = "";
     }
     renderTabs();
@@ -1585,7 +1676,9 @@ function renderConditionEditor(
   const valueControl =
     condition.type === "provider"
       ? renderProviderValueSelect(condition)
-      : renderConditionValueInput(condition);
+      : condition.type === "browser_base"
+        ? renderBrowserBaseValueSelect(condition)
+        : renderConditionValueInput(condition);
 
   div.appendChild(typeSelect);
   div.appendChild(valueControl);
@@ -1657,6 +1750,32 @@ function renderProviderValueSelect(condition: RuleCondition): HTMLElement {
     opt.value = provider.id;
     opt.textContent = providerTabLabel(provider);
     if (condition.value === provider.id) opt.selected = true;
+    select.appendChild(opt);
+  });
+
+  select.addEventListener("change", () => {
+    condition.value = select.value;
+  });
+  return select;
+}
+
+// Dropdown for the browser_base condition; value is "firefox" | "chromium" and is
+// matched at sync time against the running build's compile-time browser base.
+function renderBrowserBaseValueSelect(condition: RuleCondition): HTMLElement {
+  const select = document.createElement("select");
+
+  // Keep the data in sync with the browser's preselected first option.
+  if (!condition.value) condition.value = "firefox";
+
+  const options: Array<{ value: string; label: string }> = [
+    { value: "firefox", label: "Firefox" },
+    { value: "chromium", label: "Chromium (Chrome, Edge, …)" },
+  ];
+  options.forEach(({ value, label }) => {
+    const opt = document.createElement("option");
+    opt.value = value;
+    opt.textContent = label;
+    if (condition.value === value) opt.selected = true;
     select.appendChild(opt);
   });
 

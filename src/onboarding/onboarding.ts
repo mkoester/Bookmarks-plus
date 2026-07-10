@@ -81,21 +81,28 @@ function tailorNewTabSection(): void {
   const hasNewTab = Boolean(manifest.chrome_url_overrides?.newtab);
 
   if (hasNewTab && isFirefox) {
-    heading.textContent = "New tab";
+    heading.textContent = "New tabs & windows";
     body.replaceChildren(
-      para("New tabs now show your Bookmarks+ launcher."),
       para(
-        "To switch back to Firefox's default, open ",
-        strong("Settings → Home → New Windows and Tabs → New tabs"),
-        " and pick Firefox Home — or use the notification Firefox showed when the extension took " +
-          "over. You can flip it back any time."
+        "New tabs now show your Bookmarks+ launcher — and so do new windows and the Home button, " +
+          "since the launcher is also set as your homepage."
+      ),
+      para(
+        "You always have the final say (even if another extension also sets these): open ",
+        strong("about:preferences#home"),
+        " and reset ",
+        strong("Homepage and new windows"),
+        " and ",
+        strong("New tabs"),
+        " — or use the notifications Firefox showed when the extension took over. You can flip " +
+          "either back any time."
       )
     );
     return;
   }
 
   if (hasNewTab && !isFirefox) {
-    const startupUrl = "chrome://settings/?search=start";
+    const startupUrl = "chrome://settings/onStartup";
     heading.textContent = "New tab";
     body.replaceChildren(
       para("New tabs now show your Bookmarks+ launcher."),
