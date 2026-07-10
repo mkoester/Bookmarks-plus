@@ -88,11 +88,10 @@ the Chrome Web Store (CWS). Pairs with `CLAUDE.md` (architecture) and `PRIVACY.m
   collapsed boolean-logic help (`<details>`) on the Folders tab. Old flat
   rules load unchanged (no migration). 1.0.2 was pre-submission cleanup: shared
   folder-rendering helper (`shared/folderList.ts`), unit tests wired into
-  `pnpm build`, doc fixes. **1.1.6 is the last published version** (shipped to the
-  stores; 1.1.5 was live on AMO
-  https://addons.mozilla.org/en-US/firefox/addon/bookmarks-plus/ since 2026-07-05).
-  `v1.1.9` is built and pending upload (see Store state); it's the next release,
-  covering 1.1.7–1.1.9.
+  `pnpm build`, doc fixes. **1.1.9 is the last published version** (live on the
+  stores since 2026-07-10, covering 1.1.7–1.1.9; predecessors 1.1.6 and 1.1.5 —
+  AMO https://addons.mozilla.org/en-US/firefox/addon/bookmarks-plus/ — also
+  shipped).
 - **Code state:** `pnpm build` (type-check + 122 tests + 3 targets) clean; `pnpm
   verify:ui` (headless UI regression, 4 surfaces) green; feed conditional GET
   verified live (xkcd ETag → 304), linkding `modified_since` + pagination
@@ -100,11 +99,11 @@ the Chrome Web Store (CWS). Pairs with `CLAUDE.md` (architecture) and `PRIVACY.m
   incremental sync against the real linkding instance** (no credentials on the
   dev workstation — load the build, sync twice, background console should show
   `incremental` on the second), and re-run `web-ext lint` (0 errors expected).
-- **Store state:** **1.1.6 shipped** — the last published version. **`v1.1.9` is
-  built and pending upload** to all three listings
-  (`web-store/bookmarks-plus-{firefox,chrome,chrome-newtab}-1.1.9.zip`, built from
-  clean `main` 2026-07-10). The 1.1.9 release notes below cover everything since
-  1.1.6 (i.e. 1.1.7 + 1.1.9).
+- **Store state:** **1.1.9 live** (all three listings, since 2026-07-10) — the
+  last published version, covering 1.1.7 + 1.1.9 (built from clean `main`,
+  `web-store/bookmarks-plus-{firefox,chrome,chrome-newtab}-1.1.9.zip`). 1.1.6 and
+  1.1.5 shipped before it. The "1.1.9 upload" release notes below are the ones
+  that were published.
 
 ## Build & package (recap — details in CLAUDE.md)
 
