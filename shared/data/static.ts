@@ -242,4 +242,16 @@ export const STATIC_BOOKMARKS: Bookmark[] = [
     title: "Version",
     tag_names: ["browser", "chromium"],
   },
+  {
+    id: "26",
+    url: "about:preferences",
+    title: "Settings",
+    tag_names: ["browser", "firefox"],
+  },
+  {
+    id: "27",
+    url: "chrome://settings",
+    title: "Settings",
+    tag_names: ["browser", "chromium"],
+  },
 ];
