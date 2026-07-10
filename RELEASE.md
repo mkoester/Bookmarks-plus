@@ -2,12 +2,43 @@
 
 Working notes for publishing **Bookmarks+** to the Firefox Add-ons store (AMO) and
 the Chrome Web Store (CWS). Pairs with `CLAUDE.md` (architecture) and `PRIVACY.md`
-(privacy policy). Last worked: 2026-07-05.
+(privacy policy). Last worked: 2026-07-10.
 
 ## Current status
 
-- **Version:** 1.1.5 (single source of truth = `package.json`; injected into each
-  manifest at build). 1.1.5 = sync rework + launcher affordances:
+- **Version:** 1.2.0 (single source of truth = `package.json`; injected into each
+  manifest at build). Released — merged to `main`, tagged `v1.2.0` — on
+  2026-07-10. **New runtime dependency: `fuzzysort`** — the repo's second (the
+  first is `fast-xml-parser`); zero-dep, MIT.
+  1.2.0 = **tag autocomplete**: the folder editor's `tag` rule-condition value
+  field gains a fuzzy autocomplete dropdown of existing tags — the union across
+  all sources, ranked by frequency, with per-tag counts and the matched
+  characters highlighted; free-text (not-yet-existing) tags are still accepted.
+  Ranking is a pure, unit-tested `shared/fuzzy.ts` wrapper over **fuzzysort**.
+  The earlier `1.1.10` develop placeholder was folded into this minor release.
+  1.1.9 = **browser integration + reach**: **browser-internal bookmarks** — a
+  built-in **"Browser tools"** static folder that shows the current build's own
+  pages (Firefox: `about:debugging`/`about:config`/`about:addons`/`about:processes`/`about:preferences`;
+  Chromium: `chrome://extensions`/`inspect`/`flags`/`version`/`settings`), gated
+  by a new **`browser_base` folder-rule condition** (firefox|chromium, a
+  compile-time constant via webpack `DefinePlugin`); the URL allowlist now
+  accepts **`about:`/`chrome:`** (privileged pages open via `tabs.create`, or
+  copy-to-clipboard for Firefox's unopenable `about:` pages); and **new windows
+  show the launcher on Firefox** via a `chrome_settings_overrides.homepage`
+  override (Chromium already covers new windows through the New Tab page).
+  **No new install-time permissions, no new dependencies.**
+  1.1.8 = **dev-build ribbon**: every surface shows a coloured strip on
+  non-release builds (yellow = off-`main` branch, amber = dirty tree; release
+  builds show nothing), so a dev build is unmistakable at a glance. **Dev-facing
+  only — no user-visible change in a store build.**
+  1.1.7 = remote-folder-source **pause toggle + re-enable guard**: pause a
+  configured folder source to edit folders locally, then re-enable (with a
+  `confirm` if the local folders diverged from the last-synced set).
+  1.1.6 = **remote folder source** (load all folder definitions from a JSON file
+  on a web server; the file owns the folders, refreshed via "Sync folders now"
+  buttons on every surface or an opt-in interval) + a Linkding **"Full sync
+  now"** button (reconcile deletions immediately). Released as `v1.1.6`.
+  1.1.5 = sync rework + launcher affordances:
   **per-provider sync scheduling** (optional interval override on Linkding /
   feed / browser-bookmarks tabs; alarm follows the fastest interval),
   **incremental sync** (Linkding via `modified_since` with a server-clock
@@ -63,18 +94,22 @@ the Chrome Web Store (CWS). Pairs with `CLAUDE.md` (architecture) and `PRIVACY.m
   collapsed boolean-logic help (`<details>`) on the Folders tab. Old flat
   rules load unchanged (no migration). 1.0.2 was pre-submission cleanup: shared
   folder-rendering helper (`shared/folderList.ts`), unit tests wired into
-  `pnpm build`, doc fixes. **1.1.5 is the last published version** (AMO:
-  https://addons.mozilla.org/en-US/firefox/addon/bookmarks-plus/ — live since
-  2026-07-05, confirmed by the user the day it was released).
-- **Code state:** `pnpm build` (type-check + 98 tests + 3 targets) clean; `pnpm
+  `pnpm build`, doc fixes. **1.1.9 is the last published version** (live on the
+  stores since 2026-07-10, covering 1.1.7–1.1.9; predecessors 1.1.6 and 1.1.5 —
+  AMO https://addons.mozilla.org/en-US/firefox/addon/bookmarks-plus/ — also
+  shipped).
+- **Code state:** `pnpm build` (type-check + 122 tests + 3 targets) clean; `pnpm
   verify:ui` (headless UI regression, 4 surfaces) green; feed conditional GET
   verified live (xkcd ETag → 304), linkding `modified_since` + pagination
   verified against a local mock of the API. Before upload: **smoke-test the
   incremental sync against the real linkding instance** (no credentials on the
   dev workstation — load the build, sync twice, background console should show
   `incremental` on the second), and re-run `web-ext lint` (0 errors expected).
-- **Store state:** AMO has **1.1.5 live** (2026-07-05). CWS uploads (both
-  listings) still pending as of that date.
+- **Store state:** **1.1.9 live** (all three listings, since 2026-07-10) — the
+  last published version, covering 1.1.7 + 1.1.9 (built from clean `main`,
+  `web-store/bookmarks-plus-{firefox,chrome,chrome-newtab}-1.1.9.zip`). 1.1.6 and
+  1.1.5 shipped before it. The "1.1.9 upload" release notes below are the ones
+  that were published.
 
 ## Build & package (recap — details in CLAUDE.md)
 
@@ -159,6 +194,26 @@ Three upload artifacts → **three listings across two stores**:
       permissions; declare no data sale/transfer.
 - [ ] $5 one-time developer registration (if not already).
 - [ ] Paste the reviewer note (below).
+
+## Version notes for the 1.1.9 upload (everything since published 1.1.6)
+
+Paste into AMO "Release notes" (reuse for CWS listing descriptions — CWS has no
+changelog field). **No new install-time permissions and no new dependencies**, so
+the review surface is unchanged. Covers 1.1.7 + 1.1.9 user-facing changes; the
+dev-build ribbon (1.1.8) is internal and intentionally omitted.
+
+> - **Browser tools folder** — a built-in folder linking your browser's own pages
+>   (Firefox: about:config, about:addons, about:preferences, …; Chromium:
+>   chrome://extensions, chrome://flags, chrome://settings, …), showing just the
+>   set for the browser you're in.
+> - **Restrict a folder to one browser** — a new folder rule matches only on
+>   Firefox or only on Chromium.
+> - **New windows show your launcher on Firefox too** — not just new tabs. The
+>   launcher is set as your homepage (Firefox asks once; revert any time under
+>   Settings → Home). On Chromium new windows already show it via the New Tab page.
+> - **Pause your remote folder source** — temporarily stop it syncing so you can
+>   tweak folders locally, then re-enable (you're asked to confirm if your local
+>   changes would be overwritten).
 
 ## Version notes for the 1.1.5 upload (everything since published 1.1.4)
 

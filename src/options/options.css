@@ -379,6 +379,72 @@ button:hover {
   min-width: 4rem;
 }
 
+/* Tag condition: the input is wrapped so the fuzzy-suggestion dropdown can be
+   positioned relative to it. The wrapper takes the flex slot; input fills it. */
+.condition .tag-autocomplete {
+  position: relative;
+  flex: 1;
+  min-width: 4rem;
+}
+
+.condition .tag-autocomplete input {
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.tag-suggestions {
+  position: absolute;
+  top: calc(100% + 2px);
+  left: 0;
+  right: 0;
+  z-index: 10;
+  margin: 0;
+  padding: 0.15rem;
+  list-style: none;
+  max-height: 12rem;
+  overflow-y: auto;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 0.35rem;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.18);
+}
+
+.tag-suggestion {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.25rem 0.4rem;
+  border-radius: 0.25rem;
+  cursor: pointer;
+  color: var(--fg);
+}
+
+.tag-suggestion.is-highlighted {
+  background: var(--hover-bg);
+}
+
+.tag-suggestion-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* The character runs that fuzzy-matched the query. <mark>'s default yellow
+   background doesn't theme, so restyle it with tokens. */
+.tag-suggestion-match {
+  background: none;
+  color: var(--link);
+  font-weight: 600;
+}
+
+.tag-suggestion-count {
+  flex: 0 0 auto;
+  font-size: 0.8rem;
+  color: var(--fg-muted);
+  font-variant-numeric: tabular-nums;
+}
+
 .condition button {
   padding: 0.25rem 0.5rem;
   background: var(--error-bg);

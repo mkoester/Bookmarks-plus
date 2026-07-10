@@ -1,6 +1,6 @@
 {
   "name": "bookmarks-plus",
-  "version": "1.1.9",
+  "version": "1.2.0",
   "description": "Browser extension for Linkding bookmarks",
   "license": "MIT",
   "author": "Mirko K.",
@@ -32,6 +32,7 @@
     "webpack-merge": "^6.0.0"
   },
   "dependencies": {
-    "fast-xml-parser": "^5.9.3"
+    "fast-xml-parser": "^5.9.3",
+    "fuzzysort": "^3.1.0"
   }
 }

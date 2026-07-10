@@ -33,6 +33,63 @@ window.__verify.run(async ({ check, waitFor }) => {
   // condition, so no weight field should be shown yet.
   check("no weight field on a single-condition ANY group", !fe().querySelector("label.condition-weight"));
 
+  // --- Tag condition fuzzy autocomplete ---
+  // The first demo folder's condition is a `tag` condition; its value control is
+  // the autocomplete wrapper, not a bare input.
+  const tagInput = () => fe().querySelector(".condition .tag-autocomplete input[type=text]");
+  check("tag condition value uses the autocomplete wrapper", !!tagInput());
+
+  const ac = tagInput();
+  ac.value = "de";
+  ac.dispatchEvent(new Event("input", { bubbles: true }));
+  const sugList = () => fe().querySelector(".tag-suggestions");
+  check("typing a query opens the suggestion dropdown", !!sugList() && !sugList().hidden);
+  const sugNames = () => Array.from(fe().querySelectorAll(".tag-suggestion-name")).map((n) => n.textContent);
+  check(
+    "dropdown fuzzy-matches existing tags for 'de' (" + sugNames().join(",") + ")",
+    sugNames().includes("dev") && sugNames().includes("design")
+  );
+  check("suggestions show a per-tag count", !!fe().querySelector(".tag-suggestion-count"));
+  // The matched character run(s) are bolded via <mark class="tag-suggestion-match">.
+  // For "de" every suggestion contains those chars, so each row has a highlight.
+  const marks = () => Array.from(fe().querySelectorAll(".tag-suggestion .tag-suggestion-match")).map((m) => m.textContent);
+  check(
+    "matched characters are highlighted in the suggestions (" + marks().join(",") + ")",
+    marks().length >= 2 && marks().every((t) => t.toLowerCase().replace(/[^de]/g, "").length > 0)
+  );
+
+  // Keyboard: ArrowDown moves the highlight, Enter fills the input with it.
+  const kd = (key) => ac.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true }));
+  kd("ArrowDown");
+  const picked = fe().querySelector(".tag-suggestion.is-highlighted .tag-suggestion-name").textContent;
+  kd("Enter");
+  check(
+    "Enter selects the highlighted suggestion (" + picked + ") and closes the list",
+    tagInput().value === picked && sugList().hidden
+  );
+
+  // Free text: a tag in no source is still accepted, just with no dropdown.
+  const ac2 = tagInput();
+  ac2.value = "brand-new-tag";
+  ac2.dispatchEvent(new Event("input", { bubbles: true }));
+  check(
+    "a tag not in any source is accepted with no dropdown",
+    sugList().hidden && tagInput().value === "brand-new-tag"
+  );
+
+  // Non-tag conditions keep the plain input (autocomplete is tag-only).
+  const typeSel = () => fe().querySelector(".condition select");
+  typeSel().value = "url_contains";
+  typeSel().dispatchEvent(new Event("change", { bubbles: true }));
+  check(
+    "non-tag conditions use a plain value input (no autocomplete)",
+    !fe().querySelector(".condition .tag-autocomplete") && !!fe().querySelector(".condition input[type=text]")
+  );
+  // Restore the tag type so the downstream reorder checks see the original shape.
+  typeSel().value = "tag";
+  typeSel().dispatchEvent(new Event("change", { bubbles: true }));
+  check("switching back to Tag restores the autocomplete", !!fe().querySelector(".condition .tag-autocomplete"));
+
   const handle = fe().querySelector(".drag-handle");
   check("drag handle present", !!handle);
   check("reorder is pointer-based (handle is NOT native-draggable)", handle && handle.draggable === false);
