@@ -1,5 +1,5 @@
 import ext from "./browser";
-import { isDevBuild } from "./buildInfo";
+import { buildKind } from "./buildInfo";
 
 // The installed build's version as it should be displayed. Non-release builds carry
 // the git-decorated version (…-<hash> / …-SNAPSHOT) in version_name on Chromium or in
@@ -15,15 +15,18 @@ export function installedVersion(): string | undefined {
   }
 }
 
-// Marks a non-release build across any surface: sets data-build="dev" on <html>
-// (tokens.css then reveals the .build-ribbon strip) and injects the ribbon showing the
-// decorated version. No-op on release builds and when no version is available, so store
-// builds and the headless harnesses stay clean. Idempotent. Mirrors the data-theme
-// toggle in shared/theme.ts. Call once per page, right after applyStoredTheme().
+// Marks a non-release build across any surface: sets data-build to the build kind
+// ("branch" / "dirty") on <html> — tokens.css tints the ribbon per kind (yellow for a
+// committed branch build, amber for an uncommitted working tree) — and injects the
+// ribbon showing the decorated version. No-op on release builds and when no version is
+// available, so store builds and the headless harnesses stay clean. Idempotent.
+// Mirrors the data-theme toggle in shared/theme.ts. Call once per page, right after
+// applyStoredTheme().
 export function applyBuildBadge(): void {
   const version = installedVersion();
-  if (!isDevBuild(version)) return;
-  document.documentElement.setAttribute("data-build", "dev");
+  const kind = buildKind(version);
+  if (kind === "release") return;
+  document.documentElement.setAttribute("data-build", kind);
   if (document.querySelector(".build-ribbon")) return;
   const ribbon = document.createElement("div");
   ribbon.className = "build-ribbon";

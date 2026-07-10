@@ -1,19 +1,22 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { isDevBuild } from "../shared/buildInfo";
+import { buildKind } from "../shared/buildInfo";
 
-test("isDevBuild: clean store-safe versions are release builds", () => {
-  assert.equal(isDevBuild("1.1.8"), false);
-  assert.equal(isDevBuild("2.0.0"), false);
-  assert.equal(isDevBuild("10.20.30"), false);
+test("buildKind: clean store-safe versions are release builds", () => {
+  assert.equal(buildKind("1.1.8"), "release");
+  assert.equal(buildKind("2.0.0"), "release");
+  assert.equal(buildKind("10.20.30"), "release");
 });
 
-test("isDevBuild: git-decorated versions are dev builds", () => {
-  assert.equal(isDevBuild("1.1.8-23f44fd"), true); // other branch
-  assert.equal(isDevBuild("1.1.8-SNAPSHOT"), true); // dirty tree
-  assert.equal(isDevBuild("1.1.8-23f44fd-SNAPSHOT"), true); // both
+test("buildKind: a clean off-main build (commit hash, no SNAPSHOT) is a branch build", () => {
+  assert.equal(buildKind("1.1.8-23f44fd"), "branch");
 });
 
-test("isDevBuild: a missing version is not a dev build (harness / no manifest)", () => {
-  assert.equal(isDevBuild(undefined), false);
+test("buildKind: an uncommitted tree (-SNAPSHOT) is a dirty build", () => {
+  assert.equal(buildKind("1.1.8-SNAPSHOT"), "dirty"); // dirty on main
+  assert.equal(buildKind("1.1.8-23f44fd-SNAPSHOT"), "dirty"); // dirty off main
+});
+
+test("buildKind: a missing version is a release build (harness / no manifest)", () => {
+  assert.equal(buildKind(undefined), "release");
 });

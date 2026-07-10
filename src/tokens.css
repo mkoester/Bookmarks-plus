@@ -24,8 +24,10 @@
   --error-bg: #fdecec;
   --error-border: #f1c2c2;
   --error-fg: #8a1f1f;
-  --dev-accent: #b45309;
-  --dev-on-accent: #ffffff;
+  --dev-branch-bg: #eab308;
+  --dev-branch-fg: #1a1a2e;
+  --dev-dirty-bg: #b45309;
+  --dev-dirty-fg: #ffffff;
   color-scheme: light;
 }
 
@@ -48,8 +50,10 @@
     --error-bg: #3a1a1a;
     --error-border: #6a2a2a;
     --error-fg: #f0b8b8;
-    --dev-accent: #f59e0b;
-    --dev-on-accent: #1a1a2e;
+    --dev-branch-bg: #facc15;
+    --dev-branch-fg: #1a1a2e;
+    --dev-dirty-bg: #f59e0b;
+    --dev-dirty-fg: #1a1a2e;
     color-scheme: dark;
   }
 }
@@ -72,27 +76,39 @@
   --error-bg: #3a1a1a;
   --error-border: #6a2a2a;
   --error-fg: #f0b8b8;
-  --dev-accent: #f59e0b;
-  --dev-on-accent: #1a1a2e;
+  --dev-branch-bg: #facc15;
+  --dev-branch-fg: #1a1a2e;
+  --dev-dirty-bg: #f59e0b;
+  --dev-dirty-fg: #1a1a2e;
   color-scheme: dark;
 }
 
-/* Dev-build ribbon. shared/buildBadge.ts sets data-build="dev" on <html> for any
-   non-release (git-decorated) build and injects the .build-ribbon element; release
-   builds never set it, so this stays invisible in the stores. Amber, distinct from
-   the red .sync-error banner: "this is not a release", not "something failed".
+/* Dev-build ribbon. shared/buildBadge.ts sets data-build to the build kind on <html>
+   for any non-release (git-decorated) build and injects the .build-ribbon element;
+   release builds never set it, so this stays invisible in the stores. Colour-coded by
+   kind and distinct from the red .sync-error banner ("not a release", not "failed"):
+     - branch: yellow  — clean, committed off-main build
+     - dirty:  amber   — uncommitted working tree (-SNAPSHOT)
    Shown on all four surfaces (options / popup / sidebar / new tab). */
 .build-ribbon {
   margin: 0 0 0.75rem;
   padding: 0.35rem 0.6rem;
   border-radius: 6px;
-  background: var(--dev-accent);
-  color: var(--dev-on-accent);
   font-size: 0.72rem;
   font-weight: 700;
   letter-spacing: 0.06em;
   text-align: center;
   word-break: break-word;
+}
+
+:root[data-build="branch"] .build-ribbon {
+  background: var(--dev-branch-bg);
+  color: var(--dev-branch-fg);
+}
+
+:root[data-build="dirty"] .build-ribbon {
+  background: var(--dev-dirty-bg);
+  color: var(--dev-dirty-fg);
 }
 
 /* Shared sync-error banner (new tab / popup / sidebar). */
