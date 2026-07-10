@@ -32,6 +32,7 @@
     "webpack-merge": "^6.0.0"
   },
   "dependencies": {
-    "fast-xml-parser": "^5.9.3"
+    "fast-xml-parser": "^5.9.3",
+    "fuzzysort": "^3.1.0"
   }
 }

@@ -34,6 +34,7 @@ import type {
 import { isRuleGroup } from "@shared/types";
 import { parseFolders, parseRuleGroup } from "@shared/validation";
 import { insertionIndexForY } from "@shared/reorder";
+import { fuzzyFilterTags, highlightRuns, type TagCount, type TagSuggestion } from "@shared/fuzzy";
 
 // Provider types that may only exist once (no per-instance config to distinguish them).
 const SINGLETON_PROVIDER_TYPES = new Set<ProviderType>(["static", "browser"]);
@@ -707,6 +708,19 @@ function providerTagCounts(providerId: string): Array<{ tag: string; count: numb
   const counts = new Map<string, number>();
   for (const [id, bm] of Object.entries(bookmarks)) {
     if (!id.startsWith(prefix)) continue;
+    for (const tag of bm.tag_names) {
+      counts.set(tag, (counts.get(tag) ?? 0) + 1);
+    }
+  }
+  return [...counts.entries()].map(([tag, count]) => ({ tag, count }));
+}
+
+// Every tag across ALL sources, counts summed. A `tag` folder condition matches
+// bookmarks provider-agnostically (matchesNode checks tag_names regardless of
+// source), so the Tag autocomplete suggests the union, not one provider's slice.
+function allTagCounts(): TagCount[] {
+  const counts = new Map<string, number>();
+  for (const bm of Object.values(bookmarks)) {
     for (const tag of bm.tag_names) {
       counts.set(tag, (counts.get(tag) ?? 0) + 1);
     }
@@ -1715,6 +1729,9 @@ function renderConditionEditor(
 }
 
 function renderConditionValueInput(condition: RuleCondition): HTMLElement {
+  if (condition.type === "tag") {
+    return renderTagValueInput(condition);
+  }
   const valueInput = document.createElement("input");
   valueInput.type = "text";
   valueInput.value = condition.value;
@@ -1723,6 +1740,145 @@ function renderConditionValueInput(condition: RuleCondition): HTMLElement {
     condition.value = valueInput.value;
   });
   return valueInput;
+}
+
+// Free-text tag input with a fuzzy autocomplete dropdown of existing tags (union
+// across all sources, ranked by frequency). Values not in the collection are
+// still accepted — the dropdown only assists, it never constrains. Keeps the
+// live `condition.value = input.value` mutation of the plain input; never calls
+// renderTabs() on keystroke (documented focus-theft) — the dropdown manages its
+// own DOM directly.
+function renderTagValueInput(condition: RuleCondition): HTMLElement {
+  const wrapper = document.createElement("div");
+  wrapper.className = "tag-autocomplete";
+
+  const input = document.createElement("input");
+  input.type = "text";
+  input.value = condition.value;
+  input.placeholder = "Value";
+  input.setAttribute("role", "combobox");
+  input.setAttribute("aria-autocomplete", "list");
+  input.setAttribute("aria-expanded", "false");
+
+  const list = document.createElement("ul");
+  list.className = "tag-suggestions";
+  list.setAttribute("role", "listbox");
+  list.hidden = true;
+
+  // Bookmarks don't change while editing (a sync/save re-renders the whole tab),
+  // so snapshot the candidate tags once per widget instead of per keystroke.
+  const candidates = allTagCounts();
+  let matches: TagSuggestion[] = [];
+  let highlighted = -1;
+
+  const close = (): void => {
+    list.hidden = true;
+    input.setAttribute("aria-expanded", "false");
+    highlighted = -1;
+  };
+
+  const setHighlight = (index: number): void => {
+    highlighted = index;
+    [...list.children].forEach((li, i) => {
+      const selected = i === index;
+      li.classList.toggle("is-highlighted", selected);
+      li.setAttribute("aria-selected", selected ? "true" : "false");
+      if (selected) li.scrollIntoView({ block: "nearest" });
+    });
+  };
+
+  const selectMatch = (index: number): void => {
+    const match = matches[index];
+    if (!match) return;
+    input.value = match.tag;
+    condition.value = match.tag;
+    close();
+    input.focus();
+  };
+
+  const refresh = (): void => {
+    matches = fuzzyFilterTags(input.value, candidates);
+    // Nothing to add if the only suggestion is exactly what's already typed.
+    if (
+      matches.length === 0 ||
+      (matches.length === 1 && matches[0].tag === input.value)
+    ) {
+      close();
+      return;
+    }
+    list.replaceChildren(
+      ...matches.map(({ tag, count, matchedIndexes }, i) => {
+        const li = document.createElement("li");
+        li.className = "tag-suggestion";
+        li.setAttribute("role", "option");
+        const name = document.createElement("span");
+        name.className = "tag-suggestion-name";
+        // Bold the character runs that fuzzy-matched the query.
+        name.append(
+          ...highlightRuns(tag, matchedIndexes).map((run) => {
+            if (!run.matched) return document.createTextNode(run.text);
+            const mark = document.createElement("mark");
+            mark.className = "tag-suggestion-match";
+            mark.textContent = run.text;
+            return mark;
+          })
+        );
+        const badge = document.createElement("span");
+        badge.className = "tag-suggestion-count";
+        badge.textContent = String(count);
+        li.append(name, badge);
+        // mousedown (not click) + preventDefault so the input doesn't blur —
+        // and hide the list — before the selection registers.
+        li.addEventListener("mousedown", (e) => {
+          e.preventDefault();
+          selectMatch(i);
+        });
+        return li;
+      })
+    );
+    list.hidden = false;
+    input.setAttribute("aria-expanded", "true");
+    setHighlight(0);
+  };
+
+  input.addEventListener("input", () => {
+    condition.value = input.value;
+    refresh();
+  });
+  input.addEventListener("focus", refresh);
+  input.addEventListener("blur", close);
+  input.addEventListener("keydown", (e) => {
+    switch (e.key) {
+      case "ArrowDown":
+        e.preventDefault();
+        if (list.hidden) refresh();
+        else setHighlight(Math.min(highlighted + 1, matches.length - 1));
+        break;
+      case "ArrowUp":
+        if (list.hidden) break;
+        e.preventDefault();
+        setHighlight(Math.max(highlighted - 1, 0));
+        break;
+      case "Enter":
+        if (!list.hidden && highlighted >= 0) {
+          e.preventDefault();
+          selectMatch(highlighted);
+        }
+        break;
+      case "Escape":
+        if (!list.hidden) {
+          e.preventDefault();
+          close();
+        }
+        break;
+      case "Tab":
+        close();
+        break;
+    }
+  });
+
+  wrapper.append(input, list);
+  return wrapper;
 }
 
 // Dropdown of configured providers; value is the provider config id (the
