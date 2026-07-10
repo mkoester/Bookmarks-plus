@@ -6,10 +6,16 @@ the Chrome Web Store (CWS). Pairs with `CLAUDE.md` (architecture) and `PRIVACY.m
 
 ## Current status
 
-- **Version:** 1.1.9 (single source of truth = `package.json`; injected into each
-  manifest at build). Released — merged to `main`, tagged `v1.1.9` — on
-  2026-07-10, bundling three develop cycles (1.1.7–1.1.9) that accumulated since
-  the `v1.1.6` release.
+- **Version:** 1.2.0 (single source of truth = `package.json`; injected into each
+  manifest at build). Released — merged to `main`, tagged `v1.2.0` — on
+  2026-07-10. **New runtime dependency: `fuzzysort`** — the repo's second (the
+  first is `fast-xml-parser`); zero-dep, MIT.
+  1.2.0 = **tag autocomplete**: the folder editor's `tag` rule-condition value
+  field gains a fuzzy autocomplete dropdown of existing tags — the union across
+  all sources, ranked by frequency, with per-tag counts and the matched
+  characters highlighted; free-text (not-yet-existing) tags are still accepted.
+  Ranking is a pure, unit-tested `shared/fuzzy.ts` wrapper over **fuzzysort**.
+  The earlier `1.1.10` develop placeholder was folded into this minor release.
   1.1.9 = **browser integration + reach**: **browser-internal bookmarks** — a
   built-in **"Browser tools"** static folder that shows the current build's own
   pages (Firefox: `about:debugging`/`about:config`/`about:addons`/`about:processes`/`about:preferences`;
