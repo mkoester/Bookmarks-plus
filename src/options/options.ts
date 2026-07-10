@@ -29,6 +29,7 @@ import type {
   RuleCondition,
   RuleGroup,
   Settings,
+  Surface,
   Theme,
 } from "@shared/types";
 import { isRuleGroup } from "@shared/types";
@@ -535,6 +536,7 @@ function renderFolderReadOnly(folder: Folder): HTMLElement {
   const meta: string[] = [];
   if (folder.limit !== undefined) meta.push(`latest ${folder.limit}`);
   if (folder.sort) meta.push(`sort: ${folder.sort}`);
+  if (folder.surfaces) meta.push(`surfaces: ${folder.surfaces.join(", ") || "none"}`);
   if (meta.length > 0) {
     const span = document.createElement("span");
     span.className = "folder-readonly-meta";
@@ -1359,6 +1361,55 @@ function renderSortHelp(): HTMLElement {
 // renderTabs() re-renders (same pattern as tagSort).
 const jsonEdit = new Map<string, { text: string; error: string | null }>();
 
+const SURFACE_LABELS: ReadonlyArray<{ value: Surface; label: string }> = [
+  { value: "popup", label: "Popup" },
+  { value: "sidebar", label: "Sidebar" },
+  { value: "newtab", label: "New tab" },
+];
+
+// The "Show on" checkboxes for a folder's surface targeting. Absent surfaces =
+// shown everywhere (all boxes checked). Canonicalise: all checked stores nothing
+// (omitted = everywhere); any subset stores that array; none = [] (hidden
+// everywhere). Mutates the live folder only — never renderTabs() (focus theft),
+// same as the Latest/Sort inputs; Save persists it.
+function renderFolderSurfaces(folder: Folder): HTMLElement {
+  const group = document.createElement("div");
+  group.className = "folder-surfaces";
+  group.title =
+    "Which surfaces show this folder. All checked = everywhere (the default). " +
+    "Uncheck all to hide the folder everywhere without deleting it.";
+
+  const caption = document.createElement("span");
+  caption.className = "folder-surfaces-caption";
+  caption.textContent = "Show on";
+  group.appendChild(caption);
+
+  const inputs: Array<{ value: Surface; input: HTMLInputElement }> = [];
+  const sync = (): void => {
+    const selected = inputs.filter((c) => c.input.checked).map((c) => c.value);
+    if (selected.length === SURFACE_LABELS.length) {
+      delete folder.surfaces;
+    } else {
+      folder.surfaces = selected;
+    }
+  };
+
+  SURFACE_LABELS.forEach(({ value, label }) => {
+    const lbl = document.createElement("label");
+    lbl.className = "folder-surface";
+    const input = document.createElement("input");
+    input.type = "checkbox";
+    input.checked = folder.surfaces === undefined || folder.surfaces.includes(value);
+    input.addEventListener("change", sync);
+    lbl.appendChild(input);
+    lbl.append(label);
+    group.appendChild(lbl);
+    inputs.push({ value, input });
+  });
+
+  return group;
+}
+
 function renderFolderEditor(folder: Folder, index: number, listContainer: HTMLElement): HTMLElement {
   const div = document.createElement("div");
   div.className = "folder-editor";
@@ -1462,6 +1513,7 @@ function renderFolderEditor(folder: Folder, index: number, listContainer: HTMLEl
   settingsRow.className = "folder-settings";
   settingsRow.appendChild(limitLabel);
   settingsRow.appendChild(sortLabel);
+  settingsRow.appendChild(renderFolderSurfaces(folder));
   div.appendChild(settingsRow);
 
   div.appendChild(

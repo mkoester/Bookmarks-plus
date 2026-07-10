@@ -4,6 +4,7 @@ import { applyStoredTheme } from "@shared/theme";
 import { applyBuildBadge } from "@shared/buildBadge";
 import { renderSyncErrorBanner } from "@shared/syncBanner";
 import { renderFolderDetails } from "@shared/folderList";
+import { foldersForSurface } from "@shared/bookmarks";
 import { initSyncFoldersButton, refreshSyncFoldersButton } from "@shared/syncFoldersButton";
 import { isPrivilegedNavUrl, isCopyOnlyUrl } from "@shared/url";
 import { copyBookmarkUrl } from "@shared/copyHint";
@@ -73,10 +74,11 @@ function renderBanner(syncStatus: SyncStatus | null): void {
   if (banner) slot.appendChild(banner);
 }
 
-function renderFolders(bookmarkMap: BookmarkMap, folders: Folder[]): void {
+function renderFolders(bookmarkMap: BookmarkMap, allFolders: Folder[]): void {
   const container = document.getElementById("folders")!;
   container.innerHTML = "";
 
+  const folders = foldersForSurface(allFolders, "sidebar");
   if (folders.length === 0) {
     container.innerHTML = '<p class="empty">No folders configured.</p>';
     return;

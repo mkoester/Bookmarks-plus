@@ -5,6 +5,7 @@ import {
   bookmarkMapToArray,
   mergeIntoMap,
   computeFolderMembership,
+  foldersForSurface,
   latestN,
   matchesNode,
   matchWeight,
@@ -463,4 +464,35 @@ test("computeFolderMembership: limit (selection) + weight + sort (display) compo
   // limit=3 selects the 3 newest by date (a, c, b — "d" excluded), then display
   // orders by weight desc (a=10 first), tiebreak alphabetical among weight-1 ties (b, c).
   assert.deepEqual(result.bookmark_ids, ["a", "b", "c"]);
+});
+
+test("foldersForSurface: absent surfaces show on every surface", () => {
+  const all = folder({ id: "everywhere" }); // no surfaces field
+  for (const surface of ["popup", "sidebar", "newtab"] as const) {
+    assert.deepEqual(foldersForSurface([all], surface), [all]);
+  }
+});
+
+test("foldersForSurface: explicit list includes only the named surfaces", () => {
+  const f = folder({ id: "sidebar-only", surfaces: ["sidebar"] });
+  assert.deepEqual(foldersForSurface([f], "sidebar"), [f]);
+  assert.deepEqual(foldersForSurface([f], "popup"), []);
+  assert.deepEqual(foldersForSurface([f], "newtab"), []);
+});
+
+test("foldersForSurface: empty array hides the folder everywhere", () => {
+  const hidden = folder({ id: "hidden", surfaces: [] });
+  for (const surface of ["popup", "sidebar", "newtab"] as const) {
+    assert.deepEqual(foldersForSurface([hidden], surface), []);
+  }
+});
+
+test("foldersForSurface: mixed folders filter independently per surface", () => {
+  const everywhere = folder({ id: "e" });
+  const popupOnly = folder({ id: "p", surfaces: ["popup"] });
+  const newtabAndPopup = folder({ id: "np", surfaces: ["newtab", "popup"] });
+  const list = [everywhere, popupOnly, newtabAndPopup];
+  assert.deepEqual(foldersForSurface(list, "popup"), [everywhere, popupOnly, newtabAndPopup]);
+  assert.deepEqual(foldersForSurface(list, "newtab"), [everywhere, newtabAndPopup]);
+  assert.deepEqual(foldersForSurface(list, "sidebar"), [everywhere]);
 });

@@ -1,4 +1,4 @@
-import type { Bookmark, ConditionType, Folder, MatchMode, RuleGroup, RuleNode } from "./types";
+import type { Bookmark, ConditionType, Folder, MatchMode, RuleGroup, RuleNode, Surface } from "./types";
 import { isAllowedBookmarkUrl, isAllowedFaviconUrl } from "./url";
 
 export interface ValidationResult {
@@ -77,6 +77,8 @@ const SORT_MODES: ReadonlySet<string> = new Set<NonNullable<Folder["sort"]>>([
   "modified",
   "alphabetical",
 ]);
+
+const SURFACES: ReadonlySet<string> = new Set<Surface>(["popup", "sidebar", "newtab"]);
 
 export interface RuleGroupParseResult {
   valid: boolean;
@@ -214,6 +216,12 @@ export function parseFolders(data: unknown): FoldersParseResult {
       }
     }
 
+    if ("surfaces" in obj && obj.surfaces !== undefined) {
+      if (!Array.isArray(obj.surfaces) || !obj.surfaces.every((s) => typeof s === "string" && SURFACES.has(s))) {
+        entryErrors.push(`${prefix}: surfaces must be an array of popup, sidebar, newtab when present`);
+      }
+    }
+
     errors.push(...entryErrors);
     if (entryErrors.length > 0 || !rules.group) return;
 
@@ -224,6 +232,7 @@ export function parseFolders(data: unknown): FoldersParseResult {
       rules: rules.group,
       ...(typeof obj.limit === "number" ? { limit: obj.limit } : {}),
       ...(typeof obj.sort === "string" ? { sort: obj.sort as Folder["sort"] } : {}),
+      ...(Array.isArray(obj.surfaces) ? { surfaces: obj.surfaces as Surface[] } : {}),
       // bookmark_ids is install-specific and recomputed at sync; keep it if
       // sane so defensive loads don't blank folders between syncs.
       bookmark_ids:

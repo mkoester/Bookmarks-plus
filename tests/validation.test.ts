@@ -374,3 +374,26 @@ test("parseFolders accepts a positive integer limit and rejects other values", (
     assert.match(result.errors[0], /limit must be a positive integer/);
   }
 });
+
+// ---- parseFolders surfaces ------------------------------------------------------
+
+test("parseFolders accepts a valid surfaces array and omits it when absent", () => {
+  const ok = parseFolders([{ ...validFolder, surfaces: ["popup", "newtab"] }]);
+  assert.equal(ok.valid, true);
+  assert.deepEqual(ok.folders[0].surfaces, ["popup", "newtab"]);
+
+  const empty = parseFolders([{ ...validFolder, surfaces: [] }]);
+  assert.equal(empty.valid, true);
+  assert.deepEqual(empty.folders[0].surfaces, []); // empty = hidden everywhere, kept
+
+  const none = parseFolders([validFolder]);
+  assert.equal("surfaces" in none.folders[0], false);
+});
+
+test("parseFolders rejects invalid surfaces values", () => {
+  for (const bad of [["popup", "bogus"], ["sidebar", 2], "popup", { popup: true }]) {
+    const result = parseFolders([{ ...validFolder, surfaces: bad }]);
+    assert.equal(result.valid, false, `should reject surfaces ${JSON.stringify(bad)}`);
+    assert.match(result.errors[0], /surfaces must be an array of popup, sidebar, newtab/);
+  }
+});

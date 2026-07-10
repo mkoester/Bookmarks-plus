@@ -347,6 +347,27 @@ button:hover {
   flex: 0 0 4.5rem;
 }
 
+.folder-settings .folder-surfaces {
+  display: flex;
+  flex: 0 0 auto;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem 0.6rem;
+  font-size: 0.85rem;
+}
+
+.folder-surfaces .folder-surfaces-caption {
+  color: var(--fg-muted);
+}
+
+.folder-surfaces label.folder-surface {
+  flex: 0 0 auto;
+  flex-direction: row;
+  align-items: center;
+  gap: 0.25rem;
+  margin-bottom: 0;
+}
+
 .conditions {
   display: flex;
   flex-direction: column;
