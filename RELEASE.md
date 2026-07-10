@@ -6,14 +6,19 @@ the Chrome Web Store (CWS). Pairs with `CLAUDE.md` (architecture) and `PRIVACY.m
 
 ## Current status
 
-- **Version:** 1.2.0 (single source of truth = `package.json`; injected into each
-  manifest at build). Git-released — merged to `main`, tagged `v1.2.0` — on
-  2026-07-10; **live on AMO (Firefox) since 2026-07-10**. **The extension has
+- **Version:** 1.2.1 (single source of truth = `package.json`; injected into each
+  manifest at build). **Prepared on `develop`, not yet released** — the last
+  git-released + AMO-live version is **1.2.0** (merged to `main`, tagged `v1.2.0`,
+  live on AMO since 2026-07-10). **The extension has
   never been submitted to the Chrome Web Store** — AMO is the only store it ships
   on so far, so the `chrome`/`chrome-newtab` builds and every CWS note below are
-  prospective (a first CWS submission is still an open task). **New runtime
-  dependency: `fuzzysort`** — the repo's second (the first is `fast-xml-parser`);
-  zero-dep, MIT.
+  prospective (a first CWS submission is still an open task).
+  1.2.1 = **per-folder surface targeting + Save-button pinning**: each folder can
+  choose which surfaces it appears on (popup / sidebar / new tab; default =
+  everywhere), and the options page's "Save settings" button is now pinned beside
+  the tab bar (sticky at the top) so it's reachable without scrolling. **No new
+  permissions and no new dependencies** — review surface unchanged from 1.2.0
+  (still two bundled libraries: `fast-xml-parser`, `fuzzysort`; both MIT, zero-dep).
   1.2.0 = **tag autocomplete**: the folder editor's `tag` rule-condition value
   field gains a fuzzy autocomplete dropdown of existing tags — the union across
   all sources, ranked by frequency, with per-tag counts and the matched
@@ -102,7 +107,7 @@ the Chrome Web Store (CWS). Pairs with `CLAUDE.md` (architecture) and `PRIVACY.m
   (Firefox) since 2026-07-10; 1.1.5–1.1.9 shipped on AMO before it
   (https://addons.mozilla.org/en-US/firefox/addon/bookmarks-plus/). **AMO is the
   only store — the extension has never been on the Chrome Web Store.**
-- **Code state:** `pnpm build` (type-check + 138 tests + 3 targets) clean; `pnpm
+- **Code state:** `pnpm build` (type-check + 144 tests + 3 targets) clean; `pnpm
   verify:ui` (headless UI regression, 4 surfaces) green; feed conditional GET
   verified live (xkcd ETag → 304), linkding `modified_since` + pagination
   verified against a local mock of the API. Before upload: **smoke-test the
@@ -201,6 +206,19 @@ only the AMO listing exists today — the two CWS listings have not been created
       permissions; declare no data sale/transfer.
 - [ ] $5 one-time developer registration (if not already).
 - [ ] Paste the reviewer note (below).
+
+## Version notes for the 1.2.1 upload (everything since published 1.2.0)
+
+Paste into AMO "Release notes" (reuse for CWS listing descriptions — CWS has no
+changelog field). **No new install-time permissions and no new dependencies**, so
+the review surface is unchanged from 1.2.0. Two user-facing changes (the second is
+a small options-page usability tweak).
+
+> - **Show a folder only where you want it** — each folder now has a "Show on"
+>   choice (popup, sidebar / side panel, new tab). By default folders show
+>   everywhere; uncheck a surface to hide the folder there.
+> - **The Save button stays in reach** — on the settings page it's now pinned next
+>   to the tabs at the top, so you no longer have to scroll to the bottom to save.
 
 ## Version notes for the 1.2.0 upload (everything since published 1.1.9)
 
@@ -336,7 +354,12 @@ update — CWS has no changelog field):
 
 ## Reviewer note (paste into AMO / CWS "notes to reviewer")
 
-> **New in 1.2.0 — one added third-party library.** This release bundles a second
+> **1.2.1 adds no new third-party code and no new permissions** — the two
+> user-facing changes (per-folder surface targeting; pinning the options Save
+> button) are pure app code. The dependency/permission notes below are unchanged
+> and still current (two bundled libraries total).
+>
+> **Third-party libraries (context, unchanged since 1.2.0).** The extension bundles a second
 > runtime dependency, `fuzzysort` (MIT, from npm, unmodified), to rank the new
 > tag-autocomplete suggestions in the options page. It is a pure, dependency-free
 > library and ships in `options.js`; like everything else the build is **not
