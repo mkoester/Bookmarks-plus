@@ -107,9 +107,9 @@ type MatchMode = "all" | "any" | "none";
 interface RuleGroup { match: MatchMode; conditions: RuleNode[]; }
 type RuleNode = RuleCondition | RuleGroup;   // leaf has type+value, group has match+conditions
 type FolderRules = RuleGroup;                // a folder's rules = the root group
-type ConditionType = "tag" | "url_contains" | "title_contains" | "provider";
+type ConditionType = "tag" | "url_contains" | "title_contains" | "provider" | "browser_base";
 ```
-Groups nest arbitrarily → `A AND (B OR C)` etc. The `provider` condition's value is a **provider config id**; it matches via the namespace prefix of the bookmark id (`startsWith("${value}:")`), so no field was added to `Bookmark`. The options editor renders its value as a dropdown of configured providers (a value pointing at a removed provider is kept as an "Unknown provider" entry, never silently rewritten). Semantics (`matchesNode` in `shared/bookmarks.ts`), uniform at every level:
+Groups nest arbitrarily → `A AND (B OR C)` etc. The `provider` condition's value is a **provider config id**; it matches via the namespace prefix of the bookmark id (`startsWith("${value}:")`), so no field was added to `Bookmark`. The options editor renders its value as a dropdown of configured providers (a value pointing at a removed provider is kept as an "Unknown provider" entry, never silently rewritten). The `browser_base` condition (value `firefox`|`chromium`, since 2026-07-10) is **bookmark-independent** — it compares the build's `browserBase` constant (see Compile-time browser base) to its value, so it's the same true/false for every bookmark in a given build; used to gate a folder to one browser (e.g. the static "Browser tools" folder). Its value is rendered as a fixed firefox/chromium dropdown; like `provider`, an unknown value is validated leniently (just never matches). Membership is computed at sync time, where the constant equals the built target. Semantics (`matchesNode` in `shared/bookmarks.ts`), uniform at every level:
 
 | match  | empty conditions | non-empty conditions            |
 |--------|------------------|---------------------------------|
@@ -131,8 +131,17 @@ Empty groups never match — deliberately **not** vacuous truth for `all`, so a 
 - `shared/browser.ts` exports a single `ext` object — `browser` in Firefox, `chrome` in Chrome
 - All code imports from there; no direct `browser.*` or `chrome.*` calls
 
+**Compile-time browser base (since 2026-07-10)**
+- `shared/browserBase.ts` exports `browserBase: "firefox" | "chromium"` — a **build-time constant**, not a runtime sniff. Fed by `webpack.config.ts`'s `DefinePlugin({ __BROWSER_BASE__: … })`, keyed on the existing `target` var (firefox → `firefox`; both chrome targets share `manifest.chrome.json` → `chromium`). Webpack constant-folds it to a bare literal, so it's tree-shakeable and works in the background service worker (where `location`/`typeof browser` sniffing is awkward). The module is **ext/DOM-free** (imported by `shared/bookmarks.ts` and unit tests); its `typeof __BROWSER_BASE__` guard falls back to `"chromium"` in the node test runner, where DefinePlugin never runs. Verify a build injected the right value by diffing the `"firefox"`/`"chromium"` literal counts in `dist/<target>/background.js` (each target gets one extra of its own base on top of the 2 static-folder rule values).
+
 **URL scheme allowlist (security)**
-- `shared/url.ts` — `isAllowedBookmarkUrl` (http/https/mailto/ftp) and `isAllowedFaviconUrl` (http/https/data). `new URL()` alone accepts `javascript:`, which would run in a privileged extension page, so schemes are enforced at validation time (JSON provider) AND defensively at render time (newtab/popup/sidebar neuter bad links; favicon.ts ignores unsafe `favicon_url`).
+- `shared/url.ts` — `isAllowedBookmarkUrl` (http/https/mailto/ftp **+ about:/chrome:** since 2026-07-10) and `isAllowedFaviconUrl` (http/https/data). `new URL()` alone accepts `javascript:`, which would run in a privileged extension page, so schemes are enforced at validation time (JSON provider) AND defensively at render time (newtab/popup/sidebar neuter bad links; favicon.ts ignores unsafe `favicon_url`). `about:`/`chrome:` are allowed because — unlike `javascript:`/`data:` — they never execute in the extension page; they only open in a tab.
+- **Privileged-scheme opening**: `about:`/`chrome://` URLs can't be opened by a plain anchor click or `tabs.update()`. `isPrivilegedNavUrl(url)` (url.ts) flags both. They split by openability:
+  - **`chrome://` (Chromium)** — opens via `tabs.create()` (proven by the onboarding page). Sidebar `onOpen` routes it to `tabs.create` (not `tabs.update`); popup already uses `tabs.create`; new tab uses the `onOpenPrivileged` callback below.
+  - **`about:` (Firefox) is `isCopyOnlyUrl` — unopenable by ANY extension API.** Firefox forbids extensions from loading privileged `about:` pages (`about:debugging`, `about:config`, `about:addons`, `about:processes`): `tabs.create`/`tabs.update`/`windows.create` all reject and anchor clicks are inert (deliberate, unshipped-otherwise — Bugzilla 1356251/1269456). So clicking one **copies the URL to the clipboard + shows a hint toast** (`shared/copyHint.ts` → `copyBookmarkUrl`) so the user can paste it into the address bar (Ctrl+L). No `clipboardWrite` permission added — the user-gesture click suffices, and the toast always shows the URL as a manual fallback. "Open all" skips copy-only URLs (can't copy several at once).
+  - `renderBookmarkItem`'s `onOpenPrivileged` intercepts **only** privileged-scheme rows on the new-tab surface (where there's no `onOpen`), so normal links keep native middle/ctrl-click; the callback then branches copy-only vs `tabs.create`. Each surface's `onOpen`/`onOpenBackground` checks `isCopyOnlyUrl` first.
+  - Favicons for about:/chrome:// fall back to the letter-tile (no origin/`_favicon` result).
+  - **⚠ Don't "fix" the Firefox about: bookmarks to open in a tab** — it's a hard Firefox restriction, not our bug; the copy fallback is the intended behaviour.
 
 **Theme**
 - `Settings.theme: "system" | "light" | "dark"` (default `system`). `shared/theme.ts` sets a `data-theme` attribute on `<html>`; `src/tokens.css` (copied to `dist/tokens.css`, linked by every page before its own CSS) maps it — plus the OS `prefers-color-scheme` when the attribute is absent — to a shared `:root` token set. Each page calls `applyStoredTheme()` in init; options has the picker (live preview via `setTheme`, persisted on Save).
@@ -150,8 +159,9 @@ Empty groups never match — deliberately **not** vacuous truth for `all`, so a 
 
 **Default / static dev data**
 - `STATIC_BOOKMARKS` + `STATIC_FOLDERS` live in `shared/data/static.ts`
-- `getFolders()` falls back to `STATIC_FOLDERS` when storage is empty
+- `getFolders()` falls back to `STATIC_FOLDERS` when storage is empty (fresh install only — existing installs keep stored folders, so new static folders don't appear on upgrade)
 - Default settings use a single static provider so the extension works out of the box
+- **Browser-internal bookmarks** (ids 18–25, since 2026-07-10): Firefox pages (`about:debugging#/runtime/this-firefox`, `about:addons`, `about:config`, `about:processes`) tagged `["browser", "firefox"]`; Chromium pages (`chrome://extensions`, `chrome://inspect`, `chrome://flags`, `chrome://version`) tagged `["browser", "chromium"]` (a shared `browser` group tag + a per-base tag). The `STATIC_FOLDERS` entry **"Browser tools"** (id …0005) shows only the current browser's set via `all( tag browser, any( all(browser_base=firefox, tag firefox), all(browser_base=chromium, tag chromium) ) )` — one always-non-empty folder rather than an empty per-browser folder on the other build.
 
 ## File map
 
@@ -159,6 +169,9 @@ Empty groups never match — deliberately **not** vacuous truth for `all`, so a 
 shared/
   types.ts            — all TypeScript interfaces and the ProviderConfig union
   browser.ts          — Firefox/Chrome API shim
+  browserBase.ts      — compile-time browserBase ("firefox"|"chromium") from
+                        webpack DefinePlugin (ext/DOM-free; used by bookmarks.ts +
+                        the browser_base condition; falls back to "chromium" in tests)
   storage.ts          — storage read/write helpers, storage warning logic
   bookmarks.ts        — bookmarksToMap, mergeIntoMap, matchesNode (recursive rule
                         evaluation), computeFolderMembership (applies Folder.limit),
@@ -191,6 +204,8 @@ shared/
                         Build & tooling)
   buildBadge.ts       — installedVersion() + applyBuildBadge() (ext/DOM): the
                         dev-build ribbon injected into #app on every surface
+  copyHint.ts         — copyBookmarkUrl() (DOM): clipboard + hint-toast fallback for
+                        URLs the extension can't open (Firefox privileged about: pages)
   providers/
     index.ts          — createProvider(config) factory
     static.ts         — StaticProvider
@@ -200,10 +215,12 @@ shared/
     feed.ts           — FeedProvider (web feed URL; sniffs JSON Feed vs RSS/Atom,
                         encoding-aware decode; mappings in validation.ts / rss.ts)
   data/
-    static.ts         — STATIC_BOOKMARKS (17 items) + STATIC_FOLDERS (Crowdsourcing, Fediverse,
-                        plus two nested-rule showcases: "Community (not social media nor
-                        crowdsourcing)" = community AND NOT (social-media OR crowdsourcing),
-                        "Open knowledge" = knowledge AND (education OR opensource))
+    static.ts         — STATIC_BOOKMARKS (25 items, incl. browser-internal about:/chrome:// pages)
+                        + STATIC_FOLDERS (Crowdsourcing, Fediverse, plus nested-rule showcases:
+                        "Community (not social media nor crowdsourcing)" = community AND NOT
+                        (social-media OR crowdsourcing), "Open knowledge" = knowledge AND
+                        (education OR opensource), "Browser tools" = tag browser AND per-base
+                        browser_base + firefox/chromium tag)
 
 src/
   background/background.ts   — service worker: provider loop, alarms, message handler
@@ -244,7 +261,8 @@ public/icons/
   icon.svg                   — icon source (paperclip + "+" on linkding violet); PNGs rasterised from it
   icon48.png / icon128.png   — shipped icons (see Build & tooling for the rsvg-convert command)
 
-webpack.config.ts            — parameterised by --env target=firefox|chrome|chrome-newtab
+webpack.config.ts            — parameterised by --env target=firefox|chrome|chrome-newtab;
+                               DefinePlugin injects __BROWSER_BASE__ (see shared/browserBase.ts);
                                @shared/* alias resolves to shared/
 ```
 

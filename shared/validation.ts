@@ -70,6 +70,7 @@ const CONDITION_TYPES: ReadonlySet<string> = new Set<ConditionType>([
   "url_contains",
   "title_contains",
   "provider",
+  "browser_base",
 ]);
 const SORT_MODES: ReadonlySet<string> = new Set<NonNullable<Folder["sort"]>>([
   "added",
@@ -103,7 +104,9 @@ function parseRuleNode(data: unknown, path: string): { errors: string[]; node: R
   if (isLeaf) {
     const errors: string[] = [];
     if (typeof obj.type !== "string" || !CONDITION_TYPES.has(obj.type)) {
-      errors.push(`${path}: type must be one of tag, url_contains, title_contains, provider`);
+      errors.push(
+        `${path}: type must be one of tag, url_contains, title_contains, provider, browser_base`
+      );
     }
     if (typeof obj.value !== "string" || !obj.value.trim()) {
       errors.push(`${path}: value must be a non-empty string`);

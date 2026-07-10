@@ -4,6 +4,7 @@ import { execFileSync } from "child_process";
 import { fileURLToPath } from "url";
 import CopyPlugin from "copy-webpack-plugin";
 import { merge } from "webpack-merge";
+import webpack from "webpack";
 import type { Configuration } from "webpack";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -131,6 +132,10 @@ export default (env: { target?: string; browser?: string; mode?: string }): Conf
     else mergedManifest.version_name = decorated;
   }
 
+  // Compile-time browser base injected into the bundle (read via shared/browserBase.ts):
+  // firefox → "firefox"; both Chromium targets share manifest.chrome.json → "chromium".
+  const browserBase = target === "firefox" ? "firefox" : "chromium";
+
   const outDir = path.resolve(__dirname, `dist/${target}`);
 
   return merge(shared, {
@@ -156,6 +161,9 @@ export default (env: { target?: string; browser?: string; mode?: string }): Conf
       filename: "[name].js",
     },
     plugins: [
+      new webpack.DefinePlugin({
+        __BROWSER_BASE__: JSON.stringify(browserBase),
+      }),
       new CopyPlugin({
         patterns: [
           { from: "src/tokens.css", to: "tokens.css" },

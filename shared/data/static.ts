@@ -50,6 +50,42 @@ export const STATIC_FOLDERS: Folder[] = [
     },
     bookmark_ids: [],
   },
+  // Showcases the `browser_base` condition: one folder that shows the current
+  // browser's internal pages only. `browser` tags the group; the nested any-group
+  // pairs the `firefox`/`chromium` tag with the build's browser base, so on Firefox
+  // only the firefox-tagged pages match and on Chromium only the chromium ones — a
+  // single, always-non-empty folder rather than an empty per-browser folder on the
+  // other build.
+  {
+    id: "00000000-0000-0000-0000-000000000005",
+    name: "Browser tools",
+    rules: {
+      match: "all",
+      conditions: [
+        { type: "tag", value: "browser" },
+        {
+          match: "any",
+          conditions: [
+            {
+              match: "all",
+              conditions: [
+                { type: "browser_base", value: "firefox" },
+                { type: "tag", value: "firefox" },
+              ],
+            },
+            {
+              match: "all",
+              conditions: [
+                { type: "browser_base", value: "chromium" },
+                { type: "tag", value: "chromium" },
+              ],
+            },
+          ],
+        },
+      ],
+    },
+    bookmark_ids: [],
+  },
 ];
 
 export const STATIC_BOOKMARKS: Bookmark[] = [
@@ -154,5 +190,56 @@ export const STATIC_BOOKMARKS: Bookmark[] = [
     url: "https://lobste.rs/",
     title: "Lobsters",
     tag_names: ["news", "community", "tech"],
+  },
+  // Browser-internal pages — gated per browser by the "Browser tools" folder above.
+  // Only shown/openable on the matching build (see the browser_base condition).
+  // Tagged with a shared `browser` tag plus a per-base `firefox`/`chromium` tag.
+  {
+    id: "18",
+    url: "about:debugging#/runtime/this-firefox",
+    title: "Debug Add-ons",
+    tag_names: ["browser", "firefox"],
+  },
+  {
+    id: "19",
+    url: "about:addons",
+    title: "Add-ons Manager",
+    tag_names: ["browser", "firefox"],
+  },
+  {
+    id: "20",
+    url: "about:config",
+    title: "Advanced Configuration",
+    tag_names: ["browser", "firefox"],
+  },
+  {
+    id: "21",
+    url: "about:processes",
+    title: "Task Manager",
+    tag_names: ["browser", "firefox"],
+  },
+  {
+    id: "22",
+    url: "chrome://extensions",
+    title: "Extensions",
+    tag_names: ["browser", "chromium"],
+  },
+  {
+    id: "23",
+    url: "chrome://inspect",
+    title: "Inspect Devices",
+    tag_names: ["browser", "chromium"],
+  },
+  {
+    id: "24",
+    url: "chrome://flags",
+    title: "Experiments",
+    tag_names: ["browser", "chromium"],
+  },
+  {
+    id: "25",
+    url: "chrome://version",
+    title: "Version",
+    tag_names: ["browser", "chromium"],
   },
 ];

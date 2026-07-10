@@ -13,6 +13,7 @@ import {
 } from "../shared/bookmarks";
 import type { Bookmark, Folder, RuleGroup } from "../shared/types";
 import { STATIC_BOOKMARKS, STATIC_FOLDERS } from "../shared/data/static";
+import { browserBase } from "../shared/browserBase";
 
 function bm(id: string, overrides: Partial<Bookmark> = {}): Bookmark {
   return {
@@ -58,6 +59,39 @@ test("computeFolderMembership matches tag conditions", () => {
     folder({ rules: { match: "any", conditions: [{ type: "tag", value: "dev" }] } }),
   ]);
   assert.deepEqual(folders[0].bookmark_ids, ["a"]);
+});
+
+test("browser_base condition matches the running build's base, not the other one", () => {
+  const b = bm("a");
+  const other = browserBase === "firefox" ? "chromium" : "firefox";
+  assert.equal(matchesNode(b, { match: "all", conditions: [{ type: "browser_base", value: browserBase }] }), true);
+  assert.equal(matchesNode(b, { match: "all", conditions: [{ type: "browser_base", value: other }] }), false);
+});
+
+test("nested tag+browser_base rules select only this browser's tagged bookmarks", () => {
+  const map = bookmarksToMap([
+    bm("ff", { tag_names: ["browser", "firefox"] }),
+    bm("cr", { tag_names: ["browser", "chromium"] }),
+    bm("other", { tag_names: ["firefox"] }), // firefox-tagged but not a browser tool
+  ]);
+  // Mirror the static "Browser tools" folder:
+  // all( tag browser, any( all(base=ff, tag ff), all(base=cr, tag cr) ) ).
+  const rules: RuleGroup = {
+    match: "all",
+    conditions: [
+      { type: "tag", value: "browser" },
+      {
+        match: "any",
+        conditions: [
+          { match: "all", conditions: [{ type: "browser_base", value: "firefox" }, { type: "tag", value: "firefox" }] },
+          { match: "all", conditions: [{ type: "browser_base", value: "chromium" }, { type: "tag", value: "chromium" }] },
+        ],
+      },
+    ],
+  };
+  const [f] = computeFolderMembership(map, [folder({ rules })]);
+  const expected = browserBase === "firefox" ? ["ff"] : ["cr"];
+  assert.deepEqual(f.bookmark_ids, expected); // "other" excluded — lacks the browser tag
 });
 
 test("computeFolderMembership: 'all' requires every condition, empty matches nothing", () => {

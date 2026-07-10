@@ -5,6 +5,8 @@ import { applyBuildBadge } from "@shared/buildBadge";
 import { renderSyncErrorBanner } from "@shared/syncBanner";
 import { renderFolderDetails } from "@shared/folderList";
 import { initSyncFoldersButton, refreshSyncFoldersButton } from "@shared/syncFoldersButton";
+import { isPrivilegedNavUrl, isCopyOnlyUrl } from "@shared/url";
+import { copyBookmarkUrl } from "@shared/copyHint";
 import type { BookmarkMap, Folder, Message, SyncStatus } from "@shared/types";
 
 // The sidebar mirrors the popup's folder rendering, but it stays open, so it
@@ -88,13 +90,28 @@ function renderFolders(bookmarkMap: BookmarkMap, folders: Folder[]): void {
       renderFolderDetails(folder, bookmarkMap, {
         faviconSize: 14,
         onOpen: (bookmark) => {
-          ext.tabs.update({ url: bookmark.url });
+          // Firefox about: pages can't be opened at all — copy instead. chrome://
+          // can't load into the current tab via tabs.update, so open a new tab;
+          // everything else navigates the current tab.
+          if (isCopyOnlyUrl(bookmark.url)) {
+            copyBookmarkUrl(bookmark.url);
+          } else if (isPrivilegedNavUrl(bookmark.url)) {
+            ext.tabs.create({ url: bookmark.url });
+          } else {
+            ext.tabs.update({ url: bookmark.url });
+          }
         },
         onOpenBackground: (bookmark) => {
+          if (isCopyOnlyUrl(bookmark.url)) {
+            copyBookmarkUrl(bookmark.url);
+            return;
+          }
           ext.tabs.create({ url: bookmark.url, active: false });
         },
         onOpenAll: (bookmarks) => {
+          // Skip copy-only URLs — "open all" can't copy several at once.
           for (const bookmark of bookmarks) {
+            if (isCopyOnlyUrl(bookmark.url)) continue;
             ext.tabs.create({ url: bookmark.url, active: false });
           }
         },

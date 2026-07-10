@@ -170,3 +170,35 @@
 .sync-folders-btn.syncing {
   animation: bp-spin 1s linear infinite;
 }
+
+/* Copy-to-clipboard hint toast (shared/copyHint.ts): shown when a bookmark can't
+   be opened by the extension — Firefox's privileged about: pages — so the user can
+   paste the copied URL into the address bar. Fixed to the bottom of the surface. */
+.copy-toast {
+  position: fixed;
+  left: 50%;
+  bottom: 0.75rem;
+  transform: translateX(-50%);
+  max-width: min(92vw, 34rem);
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  padding: 0.6rem 0.8rem;
+  background: var(--surface);
+  color: var(--fg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
+  font-size: 0.85rem;
+}
+
+.copy-toast-url {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  color: var(--fg-strong);
+  word-break: break-all;
+}
+
+.copy-toast-hint {
+  color: var(--fg-muted);
+}

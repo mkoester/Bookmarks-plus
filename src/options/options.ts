@@ -1648,6 +1648,7 @@ function renderConditionEditor(
     { value: "url_contains", label: "URL contains" },
     { value: "title_contains", label: "Title contains" },
     { value: "provider", label: "Provider" },
+    { value: "browser_base", label: "Browser base" },
   ];
   conditionTypes.forEach(({ value, label }) => {
     const opt = document.createElement("option");
@@ -1659,11 +1660,14 @@ function renderConditionEditor(
   typeSelect.addEventListener("change", () => {
     const previous = condition.type;
     condition.type = typeSelect.value as RuleCondition["type"];
-    // A provider id makes no sense as tag/URL/title text (and vice versa), so
-    // reset the value when crossing that boundary; re-render swaps the control.
+    // The select-backed types (provider id, browser base) carry enum-like values that
+    // make no sense as free-text tag/URL/title (and vice versa), so reset the value when
+    // crossing that boundary; re-render swaps the control.
     if (condition.type === "provider") {
       condition.value = providers[0]?.id ?? "";
-    } else if (previous === "provider") {
+    } else if (condition.type === "browser_base") {
+      condition.value = "firefox";
+    } else if (previous === "provider" || previous === "browser_base") {
       condition.value = "";
     }
     renderTabs();
@@ -1672,7 +1676,9 @@ function renderConditionEditor(
   const valueControl =
     condition.type === "provider"
       ? renderProviderValueSelect(condition)
-      : renderConditionValueInput(condition);
+      : condition.type === "browser_base"
+        ? renderBrowserBaseValueSelect(condition)
+        : renderConditionValueInput(condition);
 
   div.appendChild(typeSelect);
   div.appendChild(valueControl);
@@ -1744,6 +1750,32 @@ function renderProviderValueSelect(condition: RuleCondition): HTMLElement {
     opt.value = provider.id;
     opt.textContent = providerTabLabel(provider);
     if (condition.value === provider.id) opt.selected = true;
+    select.appendChild(opt);
+  });
+
+  select.addEventListener("change", () => {
+    condition.value = select.value;
+  });
+  return select;
+}
+
+// Dropdown for the browser_base condition; value is "firefox" | "chromium" and is
+// matched at sync time against the running build's compile-time browser base.
+function renderBrowserBaseValueSelect(condition: RuleCondition): HTMLElement {
+  const select = document.createElement("select");
+
+  // Keep the data in sync with the browser's preselected first option.
+  if (!condition.value) condition.value = "firefox";
+
+  const options: Array<{ value: string; label: string }> = [
+    { value: "firefox", label: "Firefox" },
+    { value: "chromium", label: "Chromium (Chrome, Edge, …)" },
+  ];
+  options.forEach(({ value, label }) => {
+    const opt = document.createElement("option");
+    opt.value = value;
+    opt.textContent = label;
+    if (condition.value === value) opt.selected = true;
     select.appendChild(opt);
   });
 

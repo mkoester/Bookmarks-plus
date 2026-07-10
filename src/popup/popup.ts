@@ -5,6 +5,8 @@ import { applyBuildBadge } from "@shared/buildBadge";
 import { renderSyncErrorBanner } from "@shared/syncBanner";
 import { renderFolderDetails } from "@shared/folderList";
 import { initSyncFoldersButton } from "@shared/syncFoldersButton";
+import { isCopyOnlyUrl } from "@shared/url";
+import { copyBookmarkUrl } from "@shared/copyHint";
 import type { BookmarkMap, Folder, Message } from "@shared/types";
 
 async function init(): Promise<void> {
@@ -53,15 +55,27 @@ function renderFolders(bookmarkMap: BookmarkMap, folders: Folder[]): void {
       renderFolderDetails(folder, bookmarkMap, {
         faviconSize: 14,
         onOpen: (bookmark) => {
+          // Firefox about: pages can't be opened — copy instead, and keep the popup
+          // open so the hint toast is visible.
+          if (isCopyOnlyUrl(bookmark.url)) {
+            copyBookmarkUrl(bookmark.url);
+            return;
+          }
           ext.tabs.create({ url: bookmark.url });
           window.close();
         },
         onOpenBackground: (bookmark) => {
+          if (isCopyOnlyUrl(bookmark.url)) {
+            copyBookmarkUrl(bookmark.url);
+            return;
+          }
           ext.tabs.create({ url: bookmark.url, active: false });
           // Deliberately no window.close() — lets the user open several this way.
         },
         onOpenAll: (bookmarks) => {
+          // Skip copy-only URLs — "open all" can't copy several at once.
           for (const bookmark of bookmarks) {
+            if (isCopyOnlyUrl(bookmark.url)) continue;
             ext.tabs.create({ url: bookmark.url });
           }
           window.close();

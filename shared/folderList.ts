@@ -1,5 +1,5 @@
 import { renderFavicon } from "./favicon";
-import { isAllowedBookmarkUrl } from "./url";
+import { isAllowedBookmarkUrl, isPrivilegedNavUrl } from "./url";
 import { safeFolderBookmarks } from "./bookmarks";
 import type { Bookmark, BookmarkMap, Folder } from "./types";
 
@@ -13,6 +13,14 @@ export interface BookmarkItemOptions {
   onOpen?: (bookmark: Bookmark) => void;
   /** Opens this bookmark in a background tab without navigating/closing the current view. */
   onOpenBackground?: (bookmark: Bookmark) => void;
+  /**
+   * Handles a privileged-scheme (about:/chrome://) bookmark, which a plain anchor click
+   * can't navigate to — the callback decides how (chrome:// → tabs.create; Firefox about:
+   * → copy-to-clipboard fallback). Used by the new-tab surface, which has no `onOpen` and
+   * keeps native anchors for normal links. Ignored when `onOpen` is set — that handler
+   * already intercepts every click.
+   */
+  onOpenPrivileged?: (bookmark: Bookmark) => void;
 }
 
 export function renderBookmarkItem(bookmark: Bookmark, opts: BookmarkItemOptions): HTMLElement {
@@ -34,10 +42,17 @@ export function renderBookmarkItem(bookmark: Bookmark, opts: BookmarkItemOptions
     a.title = "Blocked: unsupported link type";
   }
 
-  if (opts.onOpen || !safe) {
+  // A browser-internal URL (about:/chrome://) can't be opened by a native anchor, so
+  // intercept it even when there's no `onOpen` (the new-tab case) as long as a handler
+  // is supplied. Normal links keep their native anchor when `onOpen` is absent.
+  const privileged = safe && !opts.onOpen && !!opts.onOpenPrivileged && isPrivilegedNavUrl(bookmark.url);
+
+  if (opts.onOpen || privileged || !safe) {
     a.addEventListener("click", (e) => {
       e.preventDefault();
-      if (safe) opts.onOpen?.(bookmark);
+      if (!safe) return;
+      if (opts.onOpen) opts.onOpen(bookmark);
+      else if (privileged) opts.onOpenPrivileged!(bookmark);
     });
   }
 

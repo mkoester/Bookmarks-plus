@@ -3,11 +3,51 @@
 // chrome-extension:// / moz-extension:// origin, so a `javascript:` href clicked
 // there would run script in that privileged context. Enforced both at validation
 // time (JSON provider) and defensively at render time (all providers).
-const ALLOWED_BOOKMARK_SCHEMES = new Set(["http:", "https:", "mailto:", "ftp:"]);
+//
+// `about:`/`chrome:` (browser-internal pages, e.g. about:debugging, chrome://extensions)
+// are allowed too: unlike `javascript:` they never execute in the extension page —
+// they can only be opened in a tab via tabs.create() (see isPrivilegedNavUrl).
+const ALLOWED_BOOKMARK_SCHEMES = new Set([
+  "http:",
+  "https:",
+  "mailto:",
+  "ftp:",
+  "about:",
+  "chrome:",
+]);
 
 export function isAllowedBookmarkUrl(url: string): boolean {
   try {
     return ALLOWED_BOOKMARK_SCHEMES.has(new URL(url).protocol);
+  } catch {
+    return false;
+  }
+}
+
+// Browser-internal schemes that a plain anchor click / tabs.update() refuses to
+// navigate to. chrome:// can still be opened with tabs.create(); Firefox about:
+// pages can't be opened by ANY extension API (see isCopyOnlyUrl). Callers use this
+// to route such bookmarks away from native anchor navigation.
+const PRIVILEGED_NAV_SCHEMES = new Set(["about:", "chrome:"]);
+
+export function isPrivilegedNavUrl(url: string): boolean {
+  try {
+    return PRIVILEGED_NAV_SCHEMES.has(new URL(url).protocol);
+  } catch {
+    return false;
+  }
+}
+
+// Firefox forbids extensions from opening privileged about: pages (about:debugging,
+// about:config, …) through any API — tabs.create/update/windows.create all reject,
+// and anchor clicks from an extension page are inert. So these can't be opened at
+// all; callers fall back to copying the URL for the user to paste into the address
+// bar. (chrome:// on Chromium is fine via tabs.create, so it is NOT copy-only.)
+const COPY_ONLY_SCHEMES = new Set(["about:"]);
+
+export function isCopyOnlyUrl(url: string): boolean {
+  try {
+    return COPY_ONLY_SCHEMES.has(new URL(url).protocol);
   } catch {
     return false;
   }

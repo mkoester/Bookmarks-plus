@@ -6,6 +6,8 @@ import { renderSyncErrorBanner } from "@shared/syncBanner";
 import { renderBookmarkItem } from "@shared/folderList";
 import { initSyncFoldersButton, refreshSyncFoldersButton } from "@shared/syncFoldersButton";
 import { safeFolderBookmarks } from "@shared/bookmarks";
+import { isCopyOnlyUrl } from "@shared/url";
+import { copyBookmarkUrl } from "@shared/copyHint";
 import type { Bookmark, BookmarkMap, Folder, Message, SyncStatus } from "@shared/types";
 
 // Skip re-rendering (and aborting in-flight favicon loads) when a sync writes
@@ -113,12 +115,25 @@ function renderFolder(folder: Folder, bookmarkMap: BookmarkMap): HTMLElement {
     if (bookmark) {
       // No onOpen: bookmarks are plain anchors opening a new tab natively
       // (keeps native middle-click/ctrl-click working unmodified). The
-      // background button is additive on top of that.
+      // background button is additive on top of that. onOpenPrivileged is the one
+      // exception — about:/chrome:// URLs can't be opened by a native anchor:
+      // chrome:// goes through tabs.create, Firefox about: falls back to copying.
       list.appendChild(
         renderBookmarkItem(bookmark, {
           faviconSize: 16,
           onOpenBackground: (b) => {
+            if (isCopyOnlyUrl(b.url)) {
+              copyBookmarkUrl(b.url);
+              return;
+            }
             ext.tabs.create({ url: b.url, active: false });
+          },
+          onOpenPrivileged: (b) => {
+            if (isCopyOnlyUrl(b.url)) {
+              copyBookmarkUrl(b.url);
+            } else {
+              ext.tabs.create({ url: b.url });
+            }
           },
         })
       );
@@ -135,6 +150,8 @@ function renderFolder(folder: Folder, bookmarkMap: BookmarkMap): HTMLElement {
 // change applies without this page re-rendering.
 async function openAll(bookmarks: Bookmark[]): Promise<void> {
   for (const bookmark of bookmarks) {
+    // Skip copy-only URLs — "open all" can't copy several at once.
+    if (isCopyOnlyUrl(bookmark.url)) continue;
     ext.tabs.create({ url: bookmark.url, active: false });
   }
   const settings = await getSettings();
