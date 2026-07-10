@@ -187,11 +187,12 @@ only the AMO listing exists today — the two CWS listings have not been created
       stores (sidebar caption says "sidebar / side panel"). See "Firefox question"
       note: only real divergence is favicons (we use deterministic letter tiles, so
       it's a fair representation of both).
-- [ ] **After the uploads, on `develop` only:** bump the patch version in
-      `package.json` — `develop` then carries the next release's version, while
-      `main`'s version only changes when a release is merged into it;
-      intermediate builds stay identifiable via the git-decorated version
-      (no bump-per-test-build).
+- [ ] **Patch bump on `develop`** — this is **step 5 of the local release
+      sequence** (see the OKF `practices/git-and-workspaces.md` release procedure),
+      done right after the tag + package, **before** pushing/uploading, not after.
+      `develop` then carries the next release's version, while `main`'s version
+      only changes when a release is merged into it; intermediate builds stay
+      identifiable via the git-decorated version (no bump-per-test-build).
 
 ### AMO (Firefox)
 - [ ] Upload `bookmarks-plus-firefox-<v>.zip`.
