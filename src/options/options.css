@@ -58,12 +58,35 @@ section {
 
 /* ---- Tabs ---- */
 
+/* The tab bar and the Save button share one row that stays pinned to the top of
+   the page while the panels scroll, so Save is always reachable without scrolling
+   to the bottom. The row's bottom border spans the full width (moved off the tab
+   bar itself) so it sits under both the tabs and the Save cluster. */
+.tab-row {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 1rem;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 1.5rem;
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background: var(--bg);
+}
+
 .tab-bar {
   display: flex;
   flex-wrap: wrap;
   gap: 0.25rem;
-  border-bottom: 1px solid var(--border);
-  margin-bottom: 1.5rem;
+}
+
+.tab-actions {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  flex-shrink: 0;
+  padding-bottom: 0.35rem;
 }
 
 .tab {
@@ -83,17 +106,6 @@ section {
 .tab.active {
   color: var(--fg-strong);
   border-bottom-color: var(--primary-hover);
-}
-
-/* ---- Footer (status + save) ---- */
-
-.footer {
-  display: flex;
-  align-items: center;
-  gap: 1rem;
-  margin-top: 1.5rem;
-  padding-top: 1rem;
-  border-top: 1px solid var(--border);
 }
 
 /* ---- Providers ---- */
@@ -613,8 +625,7 @@ button:hover {
 #status {
   font-size: 0.85rem;
   color: var(--accent);
-  min-height: 1.2em;
-  margin-bottom: 0.5rem;
+  text-align: right;
 }
 
 /* ---- Remote folder source ---- */
