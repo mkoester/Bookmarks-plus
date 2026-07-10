@@ -19,6 +19,7 @@
 - Load in Chrome/Chromium: `chrome://extensions` → Enable developer mode → Load unpacked → `dist/chrome/` (or `dist/chrome-newtab/`)
 - **Version bumping:** bump the patch version in `package.json` **once, right after a release, on the `develop` branch only** — `develop` then carries the next release's version; `main`'s version changes only when a release is merged into it. Do NOT bump per test build (that was an early-development convention, retired 2026-07-04): intermediate builds are already recognisable in the browser via the git-decorated version (next bullet). `package.json` is the single source of truth — webpack injects it into every target's manifest at build time, so don't edit version in the manifests.
 - **Git-decorated build versions** (same rules as thunderbird_send_as's `build.sh`): clean main → `1.1.3` · other branch → `1.1.3-<hash>` · dirty tree → `…-SNAPSHOT`. Computed by `decoratedVersion()` in `webpack.config.ts` at build time and written into the manifest: manifest `version` always stays the store-safe plain number, and when decorated ≠ plain the decoration goes into `version_name` on Chromium targets (display-only string) or into `version` itself on Firefox (no `version_name` support, Bugzilla #1380219; FF ≥ 108 installs it with a warning). The options-page header shows `version_name ?? version`. Store uploads are clean-main builds, so nothing non-standard can reach AMO/CWS.
+- **Dev-build ribbon** (env.style-inspired, 2026-07-10): a coloured strip shown on every surface (options/popup/sidebar/newtab) for non-release builds, so you can tell a dev build from a release at a glance. `shared/buildInfo.ts`'s pure `buildKind(version)` classifies the manifest's `version_name ?? version` — `release` (no hyphen → clean main) / `branch` (`…-<hash>` → clean off-main) / `dirty` (`…-SNAPSHOT`). `shared/buildBadge.ts`'s `applyBuildBadge()` (called after `applyStoredTheme()` in each surface's init) sets `data-build` on `<html>` and injects a `.build-ribbon`; `src/tokens.css` tints it **yellow for branch, amber for dirty** (release shows nothing, so store builds stay clean automatically — no build change needed). Inserted into `#app`, not `<body>`, so the sidebar's full-height flex column keeps its footer pinned. Mirrors the `data-theme` mechanism; `buildInfo.ts` is split ext-free so its unit test runs in node.
 
 ## Architecture decisions (already made, don't revisit)
 
@@ -185,6 +186,11 @@ shared/
                         (visibility from settings, click → sync_provider with
                         FOLDER_SOURCE_ID); separate from folderSource.ts so
                         that one stays importable in node tests (no ext)
+  buildInfo.ts        — pure buildKind(version) → release|branch|dirty
+                        (ext-free, unit-tested; see the dev-build ribbon under
+                        Build & tooling)
+  buildBadge.ts       — installedVersion() + applyBuildBadge() (ext/DOM): the
+                        dev-build ribbon injected into #app on every surface
   providers/
     index.ts          — createProvider(config) factory
     static.ts         — StaticProvider
