@@ -261,6 +261,9 @@ src/
                                (manifest options_ui.open_in_tab:true, since 2026-07-05) —
                                Firefox otherwise embeds it in a cramped ~630px about:addons
                                panel; the folder rule rows need the room. body max-width 960px.
+                               The "Save settings" button + #status live in a sticky
+                               `.tab-row` shared with the tab bar (pinned top, always
+                               reachable) — the old bottom `.footer` was removed (2026-07-10).
   options/options.html/css
   onboarding/onboarding.ts   — first-run welcome page, runtime-tailored per browser/target
   onboarding/onboarding.html/css
