@@ -6,40 +6,16 @@ Browser extension for [Linkding](https://github.com/sissbruecker/linkding) — d
 
 ## Features
 
-- New Tab page with configurable bookmark folders (on Firefox the launcher is
-  also set as your homepage, so new windows and the Home button show it too)
+- New Tab page with configurable bookmark folders (on Firefox the launcher is also set as your homepage, so new windows and the Home button show it too)
 - Popup for quick access
-- Folder rules: match bookmarks by tag, URL, title, or source provider with
-  nested ALL/ANY/NONE groups (e.g. `A AND (B OR C)`, or "everything except…");
-  optional per-folder "latest N" limit; rules editable as JSON per folder, and
-  all folder definitions exportable/importable as JSON. Reorder the conditions
-  in a rule by dragging
-- Per-folder display order: sort by newest-added, recently-modified, or
-  alphabetical; give the conditions of an OR (ANY) rule a weight to rank their
-  matches higher
-- Open every bookmark in a folder in background tabs with one button, or open a
-  single bookmark in the background — works on trackpads and touch, not just
-  middle-click; available on all surfaces including the New Tab page (which can
-  optionally close itself after opening a whole folder)
+- Folder rules: match bookmarks by tag, URL, title, or source provider with nested ALL/ANY/NONE groups (e.g. `A AND (B OR C)`, or "everything except…"); optional per-folder "latest N" limit; rules editable as JSON per folder, and all folder definitions exportable/importable as JSON. Reorder the conditions in a rule by dragging
+- Per-folder display order: sort by newest-added, recently-modified, or alphabetical; give the conditions of an OR (ANY) rule a weight to rank their matches higher
+- Open every bookmark in a folder in background tabs with one button, or open a single bookmark in the background — works on trackpads and touch, not just middle-click; available on all surfaces including the New Tab page (which can optionally close itself after opening a whole folder)
 - Reorder whole folders by dragging, same as rule conditions
-- Background sync on timer + on New Tab open, plus a per-provider "Sync now"
-  button. Each provider can override the global sync interval on its own
-  settings tab. Syncs are incremental where the source supports it — Linkding
-  via `modified_since`, web feeds via HTTP conditional GET
-  (`ETag`/`Last-Modified`) — with a periodic full sync (configurable, default
-  every 24 h) to catch deletions, which partial updates can't see; the
-  Linkding tab also has a "Full sync now" button to reconcile deletions
-  immediately
+- Background sync on timer + on New Tab open, plus a per-provider "Sync now" button. Each provider can override the global sync interval on its own settings tab. Syncs are incremental where the source supports it — Linkding via `modified_since`, web feeds via HTTP conditional GET (`ETag`/`Last-Modified`) — with a periodic full sync (configurable, default every 24 h) to catch deletions, which partial updates can't see; the Linkding tab also has a "Full sync now" button to reconcile deletions immediately
 - Import your browser's own bookmarks (folder names become tags)
-- Subscribe to web feeds — RSS 2.0/1.0, Atom, or [JSON Feed](https://www.jsonfeed.org/),
-  auto-detected — a feed's current items appear as bookmarks (categories become
-  tags, linkblog `external_url` supported), pair with a provider folder rule
-  for a "latest from X" folder
-- Optional **remote folder source**: load all folder definitions from a JSON
-  file on any web server (a raw GitHub/gist URL, your own host) — the file is
-  the single source of truth, refreshed via "Sync folders now" buttons (options
-  page and every surface, next to the Settings button) or on an opt-in
-  interval; see below
+- Subscribe to web feeds — RSS 2.0/1.0, Atom, or [JSON Feed](https://www.jsonfeed.org/), auto-detected — a feed's current items appear as bookmarks (categories become tags, linkblog `external_url` supported), pair with a provider folder rule for a "latest from X" folder
+- Optional **remote folder source**: load all folder definitions from a JSON file on any web server (a raw GitHub/gist URL, your own host) — the file is the single source of truth, refreshed via "Sync folders now" buttons (options page and every surface, next to the Settings button) or on an opt-in interval; see below
 - Static demo data mode (no Linkding instance needed)
 - Firefox + Chrome from one codebase
 
@@ -88,9 +64,7 @@ pnpm run build:chrome-newtab
 
 ### Versioning
 
-The version lives in **`package.json` only**. It's injected into each browser's
-`manifest.json` at build time ([webpack.config.ts](webpack.config.ts)), so the manifests
-carry no `version` field of their own. To release, bump it in one place:
+The version lives in **`package.json` only**. It's injected into each browser's `manifest.json` at build time ([webpack.config.ts](webpack.config.ts)), so the manifests carry no `version` field of their own. To release, bump it in one place:
 
 ```bash
 pnpm version patch   # or edit package.json "version"
@@ -124,75 +98,37 @@ Open the extension options to:
 
 ### Linkding connection & permissions
 
-Authentication is **token only** — `Authorization: Token <token>`. The Linkding REST API
-does not use the username; the **username field is a display-only label** and is never sent.
-(Get a token in Linkding under Settings → Integrations → REST API.)
+Authentication is **token only** — `Authorization: Token <token>`. The Linkding REST API does not use the username; the **username field is a display-only label** and is never sent. (Get a token in Linkding under Settings → Integrations → REST API.)
 
-The username/session of your logged-in browser **cannot** be reused (unlike the old
-Tampermonkey userscript): an extension's requests are cross-origin to your Linkding host, so
-the `SameSite=Lax` session cookie isn't sent. Token auth is the supported path and works in a
-fresh profile / background sync regardless of login state.
+The username/session of your logged-in browser **cannot** be reused (unlike the old Tampermonkey userscript): an extension's requests are cross-origin to your Linkding host, so the `SameSite=Lax` session cookie isn't sent. Token auth is the supported path and works in a fresh profile / background sync regardless of login state.
 
-On **Save**, the options page requests host permission for exactly your configured Linkding
-origin (e.g. `https://links.example.com/*`), bundled with the `bookmarks` request into a single
-prompt. This host permission is what lets the extension read the API cross-origin (it grants a
-CORS bypass for the extension's own fetches). Without it you'd see a `CORS header
-'Access-Control-Allow-Origin' missing` / `401` failure.
+On **Save**, the options page requests host permission for exactly your configured Linkding origin (e.g. `https://links.example.com/*`), bundled with the `bookmarks` request into a single prompt. This host permission is what lets the extension read the API cross-origin (it grants a CORS bypass for the extension's own fetches). Without it you'd see a `CORS header 'Access-Control-Allow-Origin' missing` / `401` failure.
 
-> **Firefox quirk:** because the manifest declares the optional host permission as `<all_urls>`,
-> a grant scoped to a single host is stored and active but does **not** appear in about:addons →
-> Permissions (the "Access your data for all websites" toggle stays off, and the specific host
-> isn't listed). Confirm it from the extension console with `browser.permissions.getAll()`.
-> Re-saving an existing Linkding provider after upgrading triggers the host-permission prompt
-> once.
+> **Firefox quirk:** because the manifest declares the optional host permission as `<all_urls>`, a grant scoped to a single host is stored and active but does **not** appear in about:addons → Permissions (the "Access your data for all websites" toggle stays off, and the specific host isn't listed). Confirm it from the extension console with `browser.permissions.getAll()`. Re-saving an existing Linkding provider after upgrading triggers the host-permission prompt once.
 
 ### Remote folder source
 
-The Folders tab can point at a **JSON file on a web server** (same format as the folder
-export) that then owns the folder definitions — handy for keeping several browsers/machines
-on one shared, version-controlled folder set:
+The Folders tab can point at a **JSON file on a web server** (same format as the folder export) that then owns the folder definitions — handy for keeping several browsers/machines on one shared, version-controlled folder set:
 
-- Use a **raw** file URL (`https://raw.githubusercontent.com/...` or
-  `https://gist.githubusercontent.com/...`, not the `github.com` HTML page); any static
-  web server works. On **Save**, host permission is requested for exactly that origin —
-  the same mechanism as for Linkding/feed providers above.
-- Every refresh **replaces all folders**, so local folder editing is disabled while a
-  source is configured (the Folders tab shows them read-only; Export stays available —
-  it's how you seed the file in the first place). Clear the URL and Save to return to
-  local editing.
-- By default the source is only fetched on **"Sync folders now"** — a button on the
-  Folders tab plus a ⟳ button next to Settings on the popup, sidebar, and New Tab page —
-  and automatically once after Save/URL changes. An optional interval (minutes) enables
-  regular background refreshes.
-- Fetches use HTTP conditional GET (`ETag`/`Last-Modified`) plus a content hash, so an
-  unchanged file is a no-op (folder ids and storage don't churn). Fetch/validation errors
-  appear in the usual sync-error banner and the previous folders stay in place.
-- Limitation: `provider` rule conditions reference this installation's provider config
-  ids, which differ per machine — a folder file shared across machines should stick to
-  tag/URL/title conditions.
+- Use a **raw** file URL (`https://raw.githubusercontent.com/...` or `https://gist.githubusercontent.com/...`, not the `github.com` HTML page); any static web server works. On **Save**, host permission is requested for exactly that origin — the same mechanism as for Linkding/feed providers above.
+- Every refresh **replaces all folders**, so local folder editing is disabled while a source is configured (the Folders tab shows them read-only; Export stays available — it's how you seed the file in the first place). Clear the URL and Save to return to local editing.
+- By default the source is only fetched on **"Sync folders now"** — a button on the Folders tab plus a ⟳ button next to Settings on the popup, sidebar, and New Tab page — and automatically once after Save/URL changes. An optional interval (minutes) enables regular background refreshes.
+- Fetches use HTTP conditional GET (`ETag`/`Last-Modified`) plus a content hash, so an unchanged file is a no-op (folder ids and storage don't churn). Fetch/validation errors appear in the usual sync-error banner and the previous folders stay in place.
+- Limitation: `provider` rule conditions reference this installation's provider config ids, which differ per machine — a folder file shared across machines should stick to tag/URL/title conditions.
 
 ### Pagination
 
-The Linkding provider fetches **all** bookmarks by following the API's `next` link
-(`/api/bookmarks/?limit=100`). Note Linkding has **no `tag` query parameter** — tag filtering
-is done via the search query (`?q=%23tagname`), not `?tag=`. The provider doesn't filter by
-tag, so this doesn't apply here, but it's the gotcha behind tag-filtered fetches elsewhere.
+The Linkding provider fetches **all** bookmarks by following the API's `next` link (`/api/bookmarks/?limit=100`). Note Linkding has **no `tag` query parameter** — tag filtering is done via the search query (`?q=%23tagname`), not `?tag=`. The provider doesn't filter by tag, so this doesn't apply here, but it's the gotcha behind tag-filtered fetches elsewhere.
 
 ### Browser bookmark tags
 
-The browser-bookmarks provider tags each imported bookmark with the **names of the
-folders it lives in** — a bookmark under `Bookmarks Toolbar / crowdsourcing` gets the
-tags `Bookmarks Toolbar` and `crowdsourcing`. To match a folder rule by tag, put the
-bookmark inside a folder of that name.
+The browser-bookmarks provider tags each imported bookmark with the **names of the folders it lives in** — a bookmark under `Bookmarks Toolbar / crowdsourcing` gets the tags `Bookmarks Toolbar` and `crowdsourcing`. To match a folder rule by tag, put the bookmark inside a folder of that name.
 
-Firefox's native bookmark tags (the tag field in the Edit Bookmark dialog) are **not**
-readable from an extension — the WebExtension API only exposes the folder structure, so
-only folder names can become tags.
+Firefox's native bookmark tags (the tag field in the Edit Bookmark dialog) are **not** readable from an extension — the WebExtension API only exposes the folder structure, so only folder names can become tags.
 
 ## Icons
 
-The icon source is [`public/icons/icon.svg`](public/icons/icon.svg). Re-rasterise the
-PNGs the manifest references with:
+The icon source is [`public/icons/icon.svg`](public/icons/icon.svg). Re-rasterise the PNGs the manifest references with:
 
 ```bash
 rsvg-convert -w 48  public/icons/icon.svg -o public/icons/icon48.png
@@ -201,5 +137,4 @@ rsvg-convert -w 128 public/icons/icon.svg -o public/icons/icon128.png
 
 ## License
 
-[MIT](LICENSE) © Mirko K. — free for any use, including commercial, with
-modification and redistribution permitted.
+[MIT](LICENSE) © Mirko K. — free for any use, including commercial, with modification and redistribution permitted.
