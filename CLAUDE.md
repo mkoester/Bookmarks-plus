@@ -294,7 +294,7 @@ Pagination: follows `next` links until exhausted (100 results per page).
 
 ## What's missing / next steps
 
-Open actions from this section were migrated to Vikunja on 2026-08-20 and now live in the **Extensions & Plugins** (`EXTENSIONS`) project — file and track them there, not here. What stays below is decision history: completed items, plus one leftover `[ ]` that duplicates a shipped entry.
+Open actions from this section were migrated to Vikunja on 2026-08-20 and now live in the **Extensions & Plugins** (`EXTENSIONS`) project — file and track them there, not here. What stays below is decision history: completed items only, so an open box in this section now means a bookkeeping slip rather than work.
 
 **Functional gaps**
 - [x] ~~Run `pnpm verify:ui` once outside the sandbox~~ — ran clean 2026-07-07 (all v1.1.6 driver checks pass), and the command is now in the workspace's sandbox `excludedCommands`, so it runs unsandboxed from Claude sessions too (see Build & tooling)
@@ -308,7 +308,7 @@ Open actions from this section were migrated to Vikunja on 2026-08-20 and now li
 **Nice to have**
 - [x] ~~Folder ordering (drag to reorder)~~ — done 2026-07-05, same pointer-drag as rule conditions (see "Reordering rule conditions/groups AND folders" above)
 - [x] ~~Bookmark ordering within folders~~ — `Folder.sort` + per-condition `weight` (see "Folder display ordering" above)
-- [ ] Error state UI when sync fails — duplicate of the shipped entry under *Functional gaps*; left as-is rather than migrated
+- [x] ~~Error state UI when sync fails~~ — shipped 2026-06-30 as the sync error banner (`shared/syncBanner.ts`, mounted in new tab / sidebar / popup); the completion was recorded as a new entry under *Functional gaps* instead of ticking this one, so this box stayed open until 2026-08-20
 
 ## Code style notes
 
