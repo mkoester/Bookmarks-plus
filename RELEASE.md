@@ -178,6 +178,8 @@ only the AMO listing exists today — the two CWS listings have not been created
 
 ## Submission checklist
 
+This checklist belongs to the release procedure and is worked here, once per release — it was deliberately **not** migrated. The Vikunja project **Extensions & Plugins** (`EXTENSIONS`) carries a single "submit the release" task that points back at this section.
+
 ### Both stores
 - [ ] Verify the `STATIC_DATA_URL` in `src/options/options.ts` matches the real
       published repo. Currently `github.com/mkoester/Bookmarks-plus` @ `main` →
@@ -389,12 +391,6 @@ update — CWS has no changelog field):
 
 ## Open / optional follow-ups
 
-- [ ] Pretty favicons in screenshots: seed demo bookmarks with `favicon_url` (would
-      then warrant capturing the Firefox build in Firefox, since Chrome's favicon
-      API flatters Firefox). Currently letter tiles → fair for both.
-- [ ] Optional Firefox-captioned screenshot variant (currently shared "sidebar /
-      side panel" wording).
-- [ ] From CLAUDE.md backlog: live JSON validation feedback in options;
-      optional_host_permission requested without `<all_urls>` if MV3 ever
-      allows. (~~Deletion handling when a provider is removed~~ and
-      ~~per-provider incremental sync~~ shipped in 1.1.5.)
+Migrated to Vikunja on 2026-08-20 — the open follow-ups now live in the **Extensions & Plugins** (`EXTENSIONS`) project. What remains here is the one item that was never a task of its own:
+
+- **`optional_host_permission` without `<all_urls>`** — not actionable; it depends on MV3 allowing it. (~~Deletion handling when a provider is removed~~ and ~~per-provider incremental sync~~ shipped in 1.1.5.)

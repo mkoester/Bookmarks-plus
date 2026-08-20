@@ -294,10 +294,11 @@ Pagination: follows `next` links until exhausted (100 results per page).
 
 ## What's missing / next steps
 
+Open actions from this section were migrated to Vikunja on 2026-08-20 and now live in the **Extensions & Plugins** (`EXTENSIONS`) project — file and track them there, not here. What stays below is decision history: completed items, plus one leftover `[ ]` that duplicates a shipped entry.
+
 **Functional gaps**
 - [x] ~~Run `pnpm verify:ui` once outside the sandbox~~ — ran clean 2026-07-07 (all v1.1.6 driver checks pass), and the command is now in the workspace's sandbox `excludedCommands`, so it runs unsandboxed from Claude sessions too (see Build & tooling)
 - [x] ~~Deletion handling for removed providers~~ — `pruneBookmarks` drops inactive providers' slices after every sync round (2026-07-05)
-- [ ] Manual JSON import UI — `validateBookmarks()` exists in `validation.ts` and the options page has a JSON textarea, but there's no live validation feedback shown to the user
 - [x] ~~Per-provider incremental sync~~ — linkding `modified_since` + feed conditional GET, with a daily full sync reconciling deletions (see Sync flow, 2026-07-05)
 - [x] ~~Options page host permission for Linkding URLs~~ — requested on Save, scoped to the configured origin (see README "Linkding connection & permissions")
 - [x] ~~Real icons~~ — paperclip+"+" `icon.svg` created and rasterised (see Build & tooling)
@@ -307,10 +308,7 @@ Pagination: follows `next` links until exhausted (100 results per page).
 **Nice to have**
 - [x] ~~Folder ordering (drag to reorder)~~ — done 2026-07-05, same pointer-drag as rule conditions (see "Reordering rule conditions/groups AND folders" above)
 - [x] ~~Bookmark ordering within folders~~ — `Folder.sort` + per-condition `weight` (see "Folder display ordering" above)
-- [ ] Search/filter within the new tab page
-- [ ] "Open in Linkding" context on individual bookmarks
-- [ ] Error state UI when sync fails
-- [ ] Show last sync timestamp in the new tab header
+- [ ] Error state UI when sync fails — duplicate of the shipped entry under *Functional gaps*; left as-is rather than migrated
 
 ## Code style notes
 
