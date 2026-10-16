@@ -18,6 +18,9 @@ Browser extension for [Linkding](https://github.com/sissbruecker/linkding) — d
 - Optional **remote folder source**: load all folder definitions from a JSON file on any web server (a raw GitHub/gist URL, your own host) — the file is the single source of truth, refreshed via "Sync folders now" buttons (options page and every surface, next to the Settings button) or on an opt-in interval; see below
 - Static demo data mode (no Linkding instance needed)
 - Firefox + Chrome from one codebase
+- Firefox for Android: the popup is the launcher there — open it from the
+  browser menu (**⋮ → Extensions → Bookmarks+**). Android has no sidebar and no
+  New Tab override, and can't read the browser's own bookmarks
 
 ## Development
 

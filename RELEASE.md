@@ -2,17 +2,22 @@
 
 Working notes for publishing **Bookmarks+** to the Firefox Add-ons store (AMO) and
 the Chrome Web Store (CWS). Pairs with `CLAUDE.md` (architecture) and `PRIVACY.md`
-(privacy policy). Last worked: 2026-07-10.
+(privacy policy). Last worked: 2026-10-16.
 
 ## Current status
 
-- **Version:** 1.2.1 (single source of truth = `package.json`; injected into each
-  manifest at build). **Prepared on `develop`, not yet released** — the last
-  git-released + AMO-live version is **1.2.0** (merged to `main`, tagged `v1.2.0`,
-  live on AMO since 2026-07-10). **The extension has
+- **Version:** 1.3.0 (single source of truth = `package.json`; injected into each
+  manifest at build). Released 2026-10-16 (merged to `main`, tagged `v1.3.0`); the
+  previous release is **1.2.1** (tagged `v1.2.1`). **The extension has
   never been submitted to the Chrome Web Store** — AMO is the only store it ships
   on so far, so the `chrome`/`chrome-newtab` builds and every CWS note below are
   prospective (a first CWS submission is still an open task).
+  1.3.0 = **Firefox for Android**: `gecko_android` in the Firefox
+  manifest, so AMO lists it for Android without desktop mode. Viewport meta on
+  every page, a full-screen popup and a phone-width settings page. Options hide
+  what Android lacks (browser-bookmarks provider, sidebar/new-tab targeting).
+  **No new permissions and no new dependencies.** At upload, check the AMO version
+  page lists **Firefox for Android** under compatibility.
   1.2.1 = **per-folder surface targeting + Save-button pinning**: each folder can
   choose which surfaces it appears on (popup / sidebar / new tab; default =
   everywhere), and the options page's "Save settings" button is now pinned beside
@@ -178,6 +183,8 @@ only the AMO listing exists today — the two CWS listings have not been created
 
 ## Submission checklist
 
+This checklist belongs to the release procedure and is worked here, once per release — it was deliberately **not** migrated. The Vikunja project **Extensions & Plugins** (`EXTENSIONS`) carries a single "submit the release" task that points back at this section.
+
 ### Both stores
 - [ ] Verify the `STATIC_DATA_URL` in `src/options/options.ts` matches the real
       published repo. Currently `github.com/mkoester/Bookmarks-plus` @ `main` →
@@ -187,11 +194,12 @@ only the AMO listing exists today — the two CWS listings have not been created
       stores (sidebar caption says "sidebar / side panel"). See "Firefox question"
       note: only real divergence is favicons (we use deterministic letter tiles, so
       it's a fair representation of both).
-- [ ] **After the uploads, on `develop` only:** bump the patch version in
-      `package.json` — `develop` then carries the next release's version, while
-      `main`'s version only changes when a release is merged into it;
-      intermediate builds stay identifiable via the git-decorated version
-      (no bump-per-test-build).
+- [ ] **Patch bump on `develop`** — this is **step 5 of the local release
+      sequence** (see the OKF `practices/git-and-workspaces.md` release procedure),
+      done right after the tag + package, **before** pushing/uploading, not after.
+      `develop` then carries the next release's version, while `main`'s version
+      only changes when a release is merged into it; intermediate builds stay
+      identifiable via the git-decorated version (no bump-per-test-build).
 
 ### AMO (Firefox)
 - [ ] Upload `bookmarks-plus-firefox-<v>.zip`.
@@ -388,12 +396,6 @@ update — CWS has no changelog field):
 
 ## Open / optional follow-ups
 
-- [ ] Pretty favicons in screenshots: seed demo bookmarks with `favicon_url` (would
-      then warrant capturing the Firefox build in Firefox, since Chrome's favicon
-      API flatters Firefox). Currently letter tiles → fair for both.
-- [ ] Optional Firefox-captioned screenshot variant (currently shared "sidebar /
-      side panel" wording).
-- [ ] From CLAUDE.md backlog: live JSON validation feedback in options;
-      optional_host_permission requested without `<all_urls>` if MV3 ever
-      allows. (~~Deletion handling when a provider is removed~~ and
-      ~~per-provider incremental sync~~ shipped in 1.1.5.)
+Migrated to Vikunja on 2026-08-20 — the open follow-ups now live in the **Extensions & Plugins** (`EXTENSIONS`) project. What remains here is the one item that was never a task of its own:
+
+- **`optional_host_permission` without `<all_urls>`** — not actionable; it depends on MV3 allowing it. (~~Deletion handling when a provider is removed~~ and ~~per-provider incremental sync~~ shipped in 1.1.5.)

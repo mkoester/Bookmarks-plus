@@ -380,6 +380,11 @@ button:hover {
   margin-bottom: 0;
 }
 
+/* The label's display:flex would otherwise beat the UA [hidden] rule. */
+.folder-surfaces label.folder-surface[hidden] {
+  display: none;
+}
+
 .conditions {
   display: flex;
   flex-direction: column;
@@ -664,4 +669,55 @@ button:hover {
   padding: 0.4rem 0.6rem;
   margin-top: 0.5rem;
   overflow-x: auto;
+}
+
+/* ---- Phone width (Firefox for Android) ----
+   Needs the viewport meta in options.html — without it mobile lays the page
+   out at ~980px and this never matches. Every row that sits on one line on
+   desktop wraps instead of overflowing, so the page only scrolls vertically. */
+@media (max-width: 600px) {
+  body {
+    padding: 0.75rem;
+    overflow-wrap: anywhere;
+  }
+
+  .tab-row {
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.25rem 1rem;
+  }
+
+  .tab {
+    padding: 0.5rem 0.6rem;
+  }
+
+  .tab-actions {
+    padding-bottom: 0.5rem;
+  }
+
+  .provider-header,
+  .folder-header,
+  .group-header,
+  .group-buttons,
+  .provider-actions,
+  .add-provider-row,
+  .perm-row {
+    flex-wrap: wrap;
+  }
+
+  input,
+  select,
+  textarea {
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  .folder-header input {
+    flex-basis: 10rem;
+  }
+
+  .rule-group {
+    margin-left: 0.25rem;
+    padding-left: 0.5rem;
+  }
 }

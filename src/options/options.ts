@@ -11,6 +11,7 @@ import {
 } from "@shared/storage";
 import { applyStoredTheme, setTheme } from "@shared/theme";
 import { applyBuildBadge, installedVersion } from "@shared/buildBadge";
+import { applyPlatform, isAndroid } from "@shared/platform";
 import { FOLDER_SOURCE_ID } from "@shared/folderSource";
 import type {
   BookmarkMap,
@@ -38,6 +39,11 @@ import { insertionIndexForY } from "@shared/reorder";
 import { fuzzyFilterTags, highlightRuns, type TagCount, type TagSuggestion } from "@shared/fuzzy";
 
 // Provider types that may only exist once (no per-instance config to distinguish them).
+// Firefox for Android: only the popup surface exists and the bookmarks API is
+// missing, so the options page hides what can't work there (set once in init,
+// read by the synchronous render functions).
+let onAndroid = false;
+
 const SINGLETON_PROVIDER_TYPES = new Set<ProviderType>(["static", "browser"]);
 
 // The bundled demo bookmarks/folders, so users can see what tags/titles/URLs the
@@ -103,7 +109,7 @@ async function init(): Promise<void> {
   folderSourceError =
     syncStatus?.errors.find((e) => e.providerId === FOLDER_SOURCE_ID)?.message ?? null;
 
-  await applyStoredTheme();
+  [onAndroid] = await Promise.all([isAndroid(), applyStoredTheme(), applyPlatform()]);
   applyBuildBadge();
   await loadGrantedOrigins();
 
@@ -201,6 +207,8 @@ function renderOverviewPanel(): HTMLElement {
   ] as Array<[ProviderType, string]>)
     // static and browser are singletons — hide them from the menu once one exists
     .filter(([value]) => !(SINGLETON_PROVIDER_TYPES.has(value) && existingTypes.has(value)))
+    // no bookmarks API on Firefox for Android
+    .filter(([value]) => !(onAndroid && value === "browser"))
     .forEach(([value, label]) => {
       const opt = document.createElement("option");
       opt.value = value;
@@ -290,7 +298,8 @@ function renderOverviewPanel(): HTMLElement {
   );
   newTabSection.appendChild(closeLabel);
 
-  root.appendChild(newTabSection);
+  // Firefox for Android has no New Tab override.
+  if (!onAndroid) root.appendChild(newTabSection);
 
   return root;
 }
@@ -1028,6 +1037,11 @@ function renderProviderConfig(provider: ProviderConfig, index: number): HTMLElem
       "\"crowdsourcing\"). Firefox's native bookmark tags are NOT readable via the extension API — only the " +
       "folder structure is. To match a folder rule by tag, put the bookmark inside a folder of that name. " +
       "Requests the bookmarks permission on first sync.";
+    if (onAndroid) {
+      note.textContent =
+        "Not available on Firefox for Android — it has no bookmarks API, so this provider can't sync here. " +
+        "Remove it, or use Linkding or a web feed instead.";
+    }
     div.appendChild(note);
     div.appendChild(renderSyncIntervalOverride(provider));
     return div;
@@ -1378,6 +1392,7 @@ function renderFolderSurfaces(folder: Folder): HTMLElement {
   group.title =
     "Which surfaces show this folder. All checked = everywhere (the default). " +
     "Uncheck all to hide the folder everywhere without deleting it.";
+  if (onAndroid) group.title += " Sidebar and new tab don't exist on Firefox for Android.";
 
   const caption = document.createElement("span");
   caption.className = "folder-surfaces-caption";
@@ -1397,6 +1412,10 @@ function renderFolderSurfaces(folder: Folder): HTMLElement {
   SURFACE_LABELS.forEach(({ value, label }) => {
     const lbl = document.createElement("label");
     lbl.className = "folder-surface";
+    // Only the popup exists on Firefox for Android. The other boxes stay in the
+    // DOM (hidden) so sync() keeps their stored state — a folder file shared
+    // with a desktop install round-trips unchanged.
+    lbl.hidden = onAndroid && value !== "popup";
     const input = document.createElement("input");
     input.type = "checkbox";
     input.checked = folder.surfaces === undefined || folder.surfaces.includes(value);

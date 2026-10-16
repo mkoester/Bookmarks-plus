@@ -9,6 +9,7 @@ window.__verify.run(async ({ check, waitFor }) => {
 
   const fe = () => document.querySelector(".folder-editor");
   check("folder editors render", !!fe());
+  check("viewport meta is present", !!document.querySelector('meta[name="viewport"]'));
 
   // Header holds the drag handle, the name and the JSON/Remove buttons;
   // Latest/Sort live on their own row below (the layout fix that stopped the

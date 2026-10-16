@@ -112,3 +112,48 @@ footer #sync-folders {
   flex: 0 0 auto;
   padding: 0.35rem 0.6rem;
 }
+
+/* ---- Firefox for Android ----
+   The popup is the only surface there and opens as a full-screen overlay, so
+   drop the desktop popup's fixed width and height cap, keep the footer in reach
+   at the bottom, and size rows for fingers. data-platform is set by
+   shared/platform.ts. */
+[data-platform="android"] body {
+  width: auto;
+}
+
+[data-platform="android"] #app {
+  min-height: 100vh;
+}
+
+[data-platform="android"] #folders {
+  max-height: none;
+  flex: 1;
+}
+
+[data-platform="android"] summary {
+  font-size: 0.8rem;
+  padding: 0.6rem 0.4rem;
+}
+
+[data-platform="android"] li a {
+  font-size: 1rem;
+  padding: 0.6rem 0.4rem;
+}
+
+[data-platform="android"] .open-all-btn,
+[data-platform="android"] .open-bg-btn {
+  padding: 0.6rem 0.75rem;
+  font-size: 1rem;
+}
+
+[data-platform="android"] footer {
+  position: sticky;
+  bottom: 0;
+  background: var(--bg);
+}
+
+[data-platform="android"] footer button {
+  padding: 0.75rem;
+  font-size: 1rem;
+}

@@ -33,13 +33,16 @@ const root = path.resolve(path.dirname(new URL(import.meta.url).pathname), "..")
 const dist = path.join(root, "dist", "chrome");
 const work = path.join(root, "web-store", ".verify-work");
 
-// Each surface: the page dir/name and a window size (options needs width for the
-// reorder geometry; the small surfaces just need to render).
+// Each run: the page dir/name, the driver (defaults to the page name) and a window
+// size (options needs width for the reorder geometry; the small surfaces just need
+// to render). The *-android drivers fake Firefox for Android at phone width.
 const PAGES = [
   { page: "options", window: "1100,900" },
   { page: "popup", window: "420,700" },
   { page: "sidebar", window: "380,800" },
   { page: "newtab", window: "1100,900" },
+  { page: "options", driver: "options-android", window: "390,844" },
+  { page: "popup", driver: "popup-android", window: "390,844" },
 ];
 
 function ensureBuilt() {
@@ -57,8 +60,8 @@ function prepareWork() {
   writeFileSync(path.join(work, "verify-harness.js"), readFileSync(path.join(root, "scripts/screenshot-harness.js")));
   writeFileSync(path.join(work, "verify-lib.js"), readFileSync(path.join(root, "scripts/ui-verify/lib.js")));
 
-  for (const { page } of PAGES) {
-    writeFileSync(path.join(work, `verify-${page}.js`), readFileSync(path.join(root, `scripts/ui-verify/${page}.js`)));
+  for (const { page, driver = page } of PAGES) {
+    writeFileSync(path.join(work, `verify-${driver}.js`), readFileSync(path.join(root, `scripts/ui-verify/${driver}.js`)));
     const htmlPath = path.join(work, page, `${page}.html`);
     let html = readFileSync(htmlPath, "utf-8");
     html = html.replace(
@@ -67,10 +70,10 @@ function prepareWork() {
         '<script src="../verify-harness.js"></script>',
         '  <script src="../$1"></script>',
         '  <script src="../verify-lib.js"></script>',
-        `  <script src="../verify-${page}.js"></script>`,
+        `  <script src="../verify-${driver}.js"></script>`,
       ].join("\n")
     );
-    writeFileSync(path.join(work, page, "_verify.html"), html);
+    writeFileSync(path.join(work, page, `_verify-${driver}.html`), html);
   }
 }
 
@@ -79,8 +82,8 @@ function decodeEntities(s) {
 }
 
 // Render one page headlessly and return its parsed PASS/FAIL lines.
-function verifyPage({ page, window: windowSize }) {
-  const url = `file://${path.join(work, page, "_verify.html")}`;
+function verifyPage({ page, driver = page, window: windowSize }) {
+  const url = `file://${path.join(work, page, `_verify-${driver}.html`)}`;
   let dom;
   try {
     // stderr is piped (not ignored) so a launch failure can say WHY — chromium
@@ -118,9 +121,9 @@ function main() {
 
   let allOk = true;
   for (const pageDef of PAGES) {
-    const { page, lines, ok } = verifyPage(pageDef);
+    const { lines, ok } = verifyPage(pageDef);
     allOk = allOk && ok;
-    console.log(`\n${ok ? "✓" : "✗"} ${page}`);
+    console.log(`\n${ok ? "✓" : "✗"} ${pageDef.driver ?? pageDef.page}`);
     for (const line of lines) console.log(`   ${line.startsWith("PASS") ? "✓" : "✗"} ${line.slice(line.indexOf(":") + 2)}`);
   }
 
