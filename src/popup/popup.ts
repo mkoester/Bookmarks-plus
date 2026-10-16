@@ -2,6 +2,7 @@ import ext from "@shared/browser";
 import { getBookmarks, getFolders, getSyncStatus } from "@shared/storage";
 import { applyStoredTheme } from "@shared/theme";
 import { applyBuildBadge } from "@shared/buildBadge";
+import { applyPlatform } from "@shared/platform";
 import { renderSyncErrorBanner } from "@shared/syncBanner";
 import { renderFolderDetails } from "@shared/folderList";
 import { foldersForSurface } from "@shared/bookmarks";
@@ -11,7 +12,7 @@ import { copyBookmarkUrl } from "@shared/copyHint";
 import type { BookmarkMap, Folder, Message } from "@shared/types";
 
 async function init(): Promise<void> {
-  await applyStoredTheme();
+  await Promise.all([applyStoredTheme(), applyPlatform()]);
   applyBuildBadge();
 
   const [bookmarkMap, folders, syncStatus] = await Promise.all([

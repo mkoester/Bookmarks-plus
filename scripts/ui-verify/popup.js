@@ -20,6 +20,8 @@ chrome.runtime.sendMessage = (msg) => {
 window.__verify.run(async ({ check, waitFor }) => {
   await waitFor(() => document.querySelector("#folders details"));
   check("folders render", !!document.querySelector("#folders details"));
+  check("viewport meta is present", !!document.querySelector('meta[name="viewport"]'));
+  check("desktop: no data-platform, popup keeps its fixed width", !document.documentElement.dataset.platform && document.body.getBoundingClientRect().width === 280);
   check("folder name is wrapped in .folder-name", !!document.querySelector(".folder-name"));
   const openAll = document.querySelector(".open-all-btn");
   check("folder has an 'open all' button", !!openAll && openAll.tagName === "BUTTON");

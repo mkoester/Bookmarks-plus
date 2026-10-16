@@ -2,6 +2,7 @@ import ext from "@shared/browser";
 import { getBookmarks, getFolders, getSyncStatus } from "@shared/storage";
 import { applyStoredTheme } from "@shared/theme";
 import { applyBuildBadge } from "@shared/buildBadge";
+import { applyPlatform } from "@shared/platform";
 import { renderSyncErrorBanner } from "@shared/syncBanner";
 import { renderFolderDetails } from "@shared/folderList";
 import { foldersForSurface } from "@shared/bookmarks";
@@ -19,7 +20,7 @@ import type { BookmarkMap, Folder, Message, SyncStatus } from "@shared/types";
 let lastRenderKey = "";
 
 async function init(): Promise<void> {
-  await applyStoredTheme();
+  await Promise.all([applyStoredTheme(), applyPlatform()]);
   applyBuildBadge();
   registerForToggle();
 

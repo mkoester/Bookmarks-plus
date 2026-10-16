@@ -46,6 +46,10 @@ are in `docs/design-notes.md`** — read it before changing anything it explains
   why a separate full sync exists, and why its interval is its own setting.
 - **Scheduling is deliberately not "on every force"** — a manual sync must not reschedule the
   automatic one.
+- **Firefox for Android has only the popup** — no sidebar, no New Tab/homepage override, no
+  `bookmarks` API. Platform is detected at runtime (`shared/platform.ts`), because desktop and
+  Android Firefox share one bundle. Every page needs the viewport meta. Desktop headless Chromium
+  cannot check the phone layout.
 - **`unlimitedStorage` is a *required* permission on Chrome**, which rejects it as optional.
 - Webpack is CJS under ESM ts-node, so **`DefinePlugin` needs a default import**.
 

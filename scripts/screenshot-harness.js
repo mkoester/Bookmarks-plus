@@ -97,6 +97,8 @@
       openOptionsPage: noop,
       getManifest: () => ({ chrome_url_overrides: { newtab: "newtab/newtab.html" } }),
       getURL: (p) => p,
+      // Desktop by default; the *-android verify drivers override it.
+      getPlatformInfo: () => Promise.resolve({ os: "linux", arch: "x86-64" }),
       connect: () => ({ name: "", onMessage: listener, onDisconnect: listener, postMessage: noop }),
       onMessage: listener,
       onInstalled: listener,

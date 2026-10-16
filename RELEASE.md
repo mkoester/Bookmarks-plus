@@ -13,6 +13,12 @@ the Chrome Web Store (CWS). Pairs with `CLAUDE.md` (architecture) and `PRIVACY.m
   never been submitted to the Chrome Web Store** — AMO is the only store it ships
   on so far, so the `chrome`/`chrome-newtab` builds and every CWS note below are
   prospective (a first CWS submission is still an open task).
+  1.2.2 (on `develop`) = **Firefox for Android**: `gecko_android` in the Firefox
+  manifest, so AMO lists it for Android without desktop mode. Viewport meta on
+  every page, a full-screen popup and a phone-width settings page. Options hide
+  what Android lacks (browser-bookmarks provider, sidebar/new-tab targeting).
+  **No new permissions and no new dependencies.** At upload, check the AMO version
+  page lists **Firefox for Android** under compatibility.
   1.2.1 = **per-folder surface targeting + Save-button pinning**: each folder can
   choose which surfaces it appears on (popup / sidebar / new tab; default =
   everywhere), and the options page's "Save settings" button is now pinned beside

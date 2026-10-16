@@ -38,6 +38,16 @@ new rules there and new evidence here.
 - **Firefox sidebar**: `Ctrl+Alt+S` via the built-in `_execute_sidebar_action` command (native toggle); `registerForToggle()` in `sidebar.ts` no-ops on Firefox.
 - **Onboarding** (`onboarding/`, opens on first install via `onInstalled` reason `"install"`): one shared page, **runtime-tailored** in `onboarding.ts`. Detect Firefox via `location.protocol === "moz-extension:"` (NOT `typeof browser` — truthy on Chromium too); detect new-tab build via `runtime.getManifest().chrome_url_overrides`. `chrome://` links are opened via `tabs.create` (plain `<a href="chrome://…">` navigation is blocked).
 
+**Firefox for Android (since 2026-10-16)**
+- **Only the popup exists.** Android does not support `sidebar_action`, `chrome_url_overrides`, `chrome_settings_overrides` or the `bookmarks` API (Extension Workshop, "Differences between desktop and Android extensions"). The popup is reached via **⋮ → Extensions → Bookmarks+** and opens as a full-screen overlay. The Firefox manifest keeps the desktop-only keys; Android ignores them.
+- **AMO listing**: `browser_specific_settings.gecko_android` (strict_min_version 128.0) in `manifest.firefox.json` marks the build Android-compatible. Without it AMO only offered the extension in desktop mode.
+- **Viewport meta on every page.** Without it mobile lays a page out at ~980px and it scrolls both ways (the original symptom on the settings page). Options/popup/sidebar lacked it; newtab/onboarding had it.
+- **Platform detection is runtime**, not compile-time like `browserBase`: desktop and Android Firefox run the same bundle. `shared/platform.ts` — `isAndroid()` (cached `runtime.getPlatformInfo()`, false on any failure) and `applyPlatform()`, which sets `data-platform="android"` on `<html>` (same pattern as `data-theme`/`data-build`). Not `@media (pointer: coarse)` — that misfires on touch laptops.
+- **Popup** (`popup.css`, `[data-platform="android"]`): drops the 280px width and 480px height cap, larger tap targets, sticky footer.
+- **Options** (`options.css`, `@media (max-width: 600px)`): rows that sit on one line on desktop wrap. Gating in `options.ts` via the module-level `onAndroid` (set once in init): the browser-bookmarks provider type is not offered (an existing one shows a "not available" note), the New Tab section is hidden, and the "Show on" group shows only Popup. The sidebar/newtab boxes stay in the DOM, hidden, so stored `surfaces` round-trip unchanged into desktop-shared folder files.
+- **Onboarding** replaces the pin/sidebar/new-tab sections with the menu path.
+- **Verification limit**: `scripts/ui-verify/{options,popup}-android.js` fake the platform and check the gating, the viewport meta and the popup width. They do **not** check horizontal overflow. Desktop headless Chromium ignores the viewport meta (even with `--enable-viewport`), so an overflow check passed with the meta and the phone CSS both stripped. The phone layout itself needs a real device.
+
 **Bookmark IDs**
 - All `Bookmark.id` values are namespaced strings: `"${providerConfigId}:${rawId}"`
 - `BookmarkMap = Record<string, Bookmark>`

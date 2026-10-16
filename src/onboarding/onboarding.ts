@@ -1,4 +1,5 @@
 import ext from "@shared/browser";
+import { isAndroid } from "@shared/platform";
 
 // The onboarding page is one shared file copied into every build. Tailor the New Tab section to
 // the build the user actually installed, detected from the manifest at runtime:
@@ -147,7 +148,30 @@ function tailorNewTabSection(): void {
   );
 }
 
-document.addEventListener("DOMContentLoaded", () => {
+// Firefox for Android has no toolbar to pin to, no sidebar and no New Tab override:
+// the popup is the only surface, and it lives in the browser menu.
+function tailorForAndroid(): void {
+  const heading = document.createElement("h2");
+  heading.textContent = "Where to find it";
+  document.querySelector("section.pin")?.replaceChildren(
+    heading,
+    para(
+      "Open it from the browser menu: ",
+      strong("⋮ → Extensions → Bookmarks+"),
+      ". It opens full-screen with your folders."
+    )
+  );
+  document.getElementById("sidebar-item")?.previousElementSibling
+    ?.replaceChildren(strong("Popup"), " — the browser menu entry above.");
+  document.getElementById("sidebar-item")?.remove();
+  document.getElementById("newtab-section")?.remove();
+}
+
+document.addEventListener("DOMContentLoaded", async () => {
+  if (await isAndroid()) {
+    tailorForAndroid();
+    return;
+  }
   tailorSidebarItem();
   tailorNewTabSection();
 });

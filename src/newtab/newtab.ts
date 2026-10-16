@@ -2,6 +2,7 @@ import ext from "@shared/browser";
 import { getBookmarks, getFolders, getSettings, getSyncStatus } from "@shared/storage";
 import { applyStoredTheme } from "@shared/theme";
 import { applyBuildBadge } from "@shared/buildBadge";
+import { applyPlatform } from "@shared/platform";
 import { renderSyncErrorBanner } from "@shared/syncBanner";
 import { renderBookmarkItem } from "@shared/folderList";
 import { initSyncFoldersButton, refreshSyncFoldersButton } from "@shared/syncFoldersButton";
@@ -21,7 +22,7 @@ let lastRenderKey = "";
 // block any script-side redirect back to the native page — about:home/about:blank are denied). So
 // if we're running here, the user opted in — just render the launcher.
 async function init(): Promise<void> {
-  await applyStoredTheme();
+  await Promise.all([applyStoredTheme(), applyPlatform()]);
   applyBuildBadge();
 
   document.getElementById("open-settings")?.addEventListener("click", () => {
