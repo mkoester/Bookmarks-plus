@@ -179,7 +179,9 @@ only the AMO listing exists today — the two CWS listings have not been created
 2. + 3. `data_collection_permissions` "unsupported below FF 140" — the key needs
    Firefox 140; our floor is `strict_min_version: 128` (ESR). Key is correct and
    forward-compatible (inert <140, honoured ≥140). **Decision: keep min 128**, do
-   not raise it just to clear these.
+   not raise it just to clear these. Since 1.3.0 (`gecko_android`) AMO adds the
+   Android variant of the same warning: Firefox for Android needs 142 for the key,
+   and the Android floor is also 128. Same reasoning, same decision.
 
 ## Submission checklist
 
