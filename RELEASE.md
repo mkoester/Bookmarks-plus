@@ -2,18 +2,17 @@
 
 Working notes for publishing **Bookmarks+** to the Firefox Add-ons store (AMO) and
 the Chrome Web Store (CWS). Pairs with `CLAUDE.md` (architecture) and `PRIVACY.md`
-(privacy policy). Last worked: 2026-07-10.
+(privacy policy). Last worked: 2026-10-16.
 
 ## Current status
 
-- **Version:** 1.2.1 (single source of truth = `package.json`; injected into each
-  manifest at build). **Prepared on `develop`, not yet released** — the last
-  git-released + AMO-live version is **1.2.0** (merged to `main`, tagged `v1.2.0`,
-  live on AMO since 2026-07-10). **The extension has
+- **Version:** 1.3.0 (single source of truth = `package.json`; injected into each
+  manifest at build). Released 2026-10-16 (merged to `main`, tagged `v1.3.0`); the
+  previous release is **1.2.1** (tagged `v1.2.1`). **The extension has
   never been submitted to the Chrome Web Store** — AMO is the only store it ships
   on so far, so the `chrome`/`chrome-newtab` builds and every CWS note below are
   prospective (a first CWS submission is still an open task).
-  1.2.2 (on `develop`) = **Firefox for Android**: `gecko_android` in the Firefox
+  1.3.0 = **Firefox for Android**: `gecko_android` in the Firefox
   manifest, so AMO lists it for Android without desktop mode. Viewport meta on
   every page, a full-screen popup and a phone-width settings page. Options hide
   what Android lacks (browser-bookmarks provider, sidebar/new-tab targeting).
