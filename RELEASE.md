@@ -12,6 +12,10 @@ the Chrome Web Store (CWS). Pairs with `CLAUDE.md` (architecture) and `PRIVACY.m
   never been submitted to the Chrome Web Store** — AMO is the only store it ships
   on so far, so the `chrome`/`chrome-newtab` builds and every CWS note below are
   prospective (a first CWS submission is still an open task).
+  1.3.1 (on `develop`) = **launcher link** (Overview: copy the new-tab page's URL
+  to bookmark it as a tab launcher, e.g. on Android), and the provider tab's Sync
+  now / Full sync now / Remove buttons moved above the tag table. No new
+  permissions or dependencies.
   1.3.0 = **Firefox for Android**: `gecko_android` in the Firefox
   manifest, so AMO lists it for Android without desktop mode. Viewport meta on
   every page, a full-screen popup and a phone-width settings page. Options hide

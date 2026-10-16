@@ -7,7 +7,10 @@
 
 let toastTimer: ReturnType<typeof setTimeout> | undefined;
 
-export async function copyBookmarkUrl(url: string): Promise<void> {
+const PRIVILEGED_HINT =
+  "Firefox blocks extensions from opening this page — paste it into the address bar (Ctrl+L).";
+
+export async function copyBookmarkUrl(url: string, hintText: string = PRIVILEGED_HINT): Promise<void> {
   let copied = false;
   try {
     // Works from a user-gesture click in an extension page (a secure context) with
@@ -17,10 +20,10 @@ export async function copyBookmarkUrl(url: string): Promise<void> {
   } catch {
     // ignore — the toast below still shows the URL to copy manually
   }
-  showCopyToast(url, copied);
+  showCopyToast(url, copied, hintText);
 }
 
-function showCopyToast(url: string, copied: boolean): void {
+function showCopyToast(url: string, copied: boolean, hintText: string): void {
   document.querySelector(".copy-toast")?.remove();
 
   const toast = document.createElement("div");
@@ -36,7 +39,7 @@ function showCopyToast(url: string, copied: boolean): void {
 
   const hint = document.createElement("span");
   hint.className = "copy-toast-hint";
-  hint.textContent = "Firefox blocks extensions from opening this page — paste it into the address bar (Ctrl+L).";
+  hint.textContent = hintText;
 
   toast.append(heading, urlLine, hint);
   document.body.appendChild(toast);

@@ -200,6 +200,27 @@ window.__verify.run(async ({ check, waitFor }) => {
     !!overviewRow.querySelector(".full-sync-now-btn")
   );
 
+  // --- Overview: launcher link (the new-tab page as a bookmarkable tab URL) ---
+  const launcher = document.querySelector(".launcher-link");
+  check(
+    "Overview shows the launcher link (runtime.getURL of newtab.html)",
+    !!launcher && launcher.querySelector("code")?.textContent === "newtab/newtab.html"
+  );
+  // Stub the clipboard (headless has none) and flush microtasks only — a
+  // macrotask-yielding wait here lets --dump-dom fire before the driver ends.
+  const copied = [];
+  Object.defineProperty(navigator, "clipboard", {
+    configurable: true,
+    value: { writeText: (t) => { copied.push(t); return Promise.resolve(); } },
+  });
+  launcher.querySelector(".copy-launcher-btn").dispatchEvent(new MouseEvent("click", { bubbles: true }));
+  for (let i = 0; i < 5; i++) await null;
+  check("Copy launcher link writes the link to the clipboard", copied[0] === "newtab/newtab.html");
+  check(
+    "Copy launcher link shows the copy toast with the link",
+    document.querySelector(".copy-toast-url")?.textContent === "newtab/newtab.html"
+  );
+
   // --- Provider tab: interval override, full-sync interval, last-synced, Sync now ---
   Array.from(document.querySelectorAll("#tab-bar button"))
     .find((b) => b.textContent === "linkding (me)")
@@ -228,6 +249,12 @@ window.__verify.run(async ({ check, waitFor }) => {
   check(
     "provider tab has Sync now next to Remove provider",
     !!syncNow && !!panel.querySelector(".provider-actions .remove-provider-btn")
+  );
+  const tagTable = panel.querySelector(".tag-table");
+  check(
+    "provider actions sit above the tag table",
+    !!tagTable &&
+      !!(panel.querySelector(".provider-actions").compareDocumentPosition(tagTable) & Node.DOCUMENT_POSITION_FOLLOWING)
   );
   syncNow.dispatchEvent(new MouseEvent("click", { bubbles: true }));
   check(

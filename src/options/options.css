@@ -211,6 +211,12 @@ section {
   flex-shrink: 0;
 }
 
+/* Same row shape as a permission, but copying is not a destructive action. */
+.launcher-link button {
+  background: var(--surface-2);
+  border-color: var(--border);
+}
+
 /* ---- Tag table ---- */
 
 .tag-table {
