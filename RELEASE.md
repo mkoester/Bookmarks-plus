@@ -6,13 +6,13 @@ the Chrome Web Store (CWS). Pairs with `CLAUDE.md` (architecture) and `PRIVACY.m
 
 ## Current status
 
-- **Version:** 1.3.0 (single source of truth = `package.json`; injected into each
-  manifest at build). Released 2026-10-16 (merged to `main`, tagged `v1.3.0`); the
-  previous release is **1.2.1** (tagged `v1.2.1`). **The extension has
+- **Version:** 1.3.1 (single source of truth = `package.json`; injected into each
+  manifest at build). Released 2026-10-16 (merged to `main`, tagged `v1.3.1`); the
+  previous release is **1.3.0** (tagged `v1.3.0`, live on AMO). **The extension has
   never been submitted to the Chrome Web Store** — AMO is the only store it ships
   on so far, so the `chrome`/`chrome-newtab` builds and every CWS note below are
   prospective (a first CWS submission is still an open task).
-  1.3.1 (on `develop`) = **launcher link** (Overview: copy the new-tab page's URL
+  1.3.1 = **launcher link** (Overview: copy the new-tab page's URL
   to bookmark it as a tab launcher, e.g. on Android), and the provider tab's Sync
   now / Full sync now / Remove buttons moved above the tag table. No new
   permissions or dependencies.
