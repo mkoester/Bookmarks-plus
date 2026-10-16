@@ -20,7 +20,9 @@ Browser extension for [Linkding](https://github.com/sissbruecker/linkding) — d
 - Firefox + Chrome from one codebase
 - Firefox for Android: the popup is the launcher there — open it from the
   browser menu (**⋮ → Extensions → Bookmarks+**). Android has no sidebar and no
-  New Tab override, and can't read the browser's own bookmarks
+  New Tab override, and can't read the browser's own bookmarks. For a launcher
+  in a tab, copy the link from **Settings → Overview → Launcher link** and
+  bookmark it
 
 ## Development
 

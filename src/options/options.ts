@@ -36,6 +36,7 @@ import type {
 import { isRuleGroup } from "@shared/types";
 import { parseFolders, parseRuleGroup } from "@shared/validation";
 import { insertionIndexForY } from "@shared/reorder";
+import { copyBookmarkUrl } from "@shared/copyHint";
 import { fuzzyFilterTags, highlightRuns, type TagCount, type TagSuggestion } from "@shared/fuzzy";
 
 // Provider types that may only exist once (no per-instance config to distinguish them).
@@ -271,6 +272,32 @@ function renderOverviewPanel(): HTMLElement {
   themeLabel.appendChild(themeSelect);
   appearanceSection.appendChild(themeLabel);
   root.appendChild(appearanceSection);
+
+  // Launcher link: the new-tab page opened as an ordinary tab. Every build ships
+  // newtab.html (only the manifest override differs), so this works everywhere —
+  // and it's the only way to get a tab launcher on Firefox for Android.
+  const launcherSection = document.createElement("section");
+  launcherSection.appendChild(sectionHeading("Launcher link"));
+  launcherSection.appendChild(
+    hint(
+      "Bookmark this link to open the launcher in a tab — handy on Firefox for Android, which " +
+      "has no New Tab override. It is unique to this install: reinstalling the extension changes it."
+    )
+  );
+  const launcherUrl = ext.runtime.getURL("newtab/newtab.html");
+  const launcherRow = document.createElement("div");
+  launcherRow.className = "perm-row launcher-link";
+  const launcherCode = document.createElement("code");
+  launcherCode.textContent = launcherUrl;
+  const copyLauncherBtn = document.createElement("button");
+  copyLauncherBtn.className = "copy-launcher-btn";
+  copyLauncherBtn.textContent = "Copy launcher link";
+  copyLauncherBtn.addEventListener("click", () =>
+    copyBookmarkUrl(launcherUrl, "Paste it into the address bar and bookmark the page.")
+  );
+  launcherRow.append(launcherCode, copyLauncherBtn);
+  launcherSection.appendChild(launcherRow);
+  root.appendChild(launcherSection);
 
   // New Tab page (informational — the browser, not the extension, controls whether it's used)
   const newTabSection = document.createElement("section");
@@ -600,6 +627,21 @@ function renderProviderPanel(providerId: string): HTMLElement {
     section.appendChild(hint(`${linkCount} bookmarks synced from this provider.`));
   }
 
+  // Above the tag table, which can be long — the actions stay in reach.
+  const actions = document.createElement("div");
+  actions.className = "provider-actions";
+  const syncBtn = renderSyncNowButton(provider);
+  if (syncBtn) actions.appendChild(syncBtn);
+  const fullSyncBtn = renderFullSyncNowButton(provider);
+  if (fullSyncBtn) actions.appendChild(fullSyncBtn);
+
+  const removeBtn = document.createElement("button");
+  removeBtn.className = "remove-provider-btn";
+  removeBtn.textContent = "Remove provider";
+  removeBtn.addEventListener("click", () => removeProvider(provider.id));
+  actions.appendChild(removeBtn);
+  section.appendChild(actions);
+
   const tags = sortTagCounts(providerTagCounts(provider.id));
   if (linkCount > 0) {
     section.appendChild(sectionHeading("Tags"));
@@ -615,19 +657,6 @@ function renderProviderPanel(providerId: string): HTMLElement {
     }
   }
 
-  const actions = document.createElement("div");
-  actions.className = "provider-actions";
-  const syncBtn = renderSyncNowButton(provider);
-  if (syncBtn) actions.appendChild(syncBtn);
-  const fullSyncBtn = renderFullSyncNowButton(provider);
-  if (fullSyncBtn) actions.appendChild(fullSyncBtn);
-
-  const removeBtn = document.createElement("button");
-  removeBtn.className = "remove-provider-btn";
-  removeBtn.textContent = "Remove provider";
-  removeBtn.addEventListener("click", () => removeProvider(provider.id));
-  actions.appendChild(removeBtn);
-  section.appendChild(actions);
 
   return section;
 }
